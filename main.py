@@ -2,14 +2,13 @@
 main.py — CLI 入口
 
 用法：
-  python main.py --input /path/to/image.jpg --pixels-per-micron 2.25
-  python main.py --input /path/to/folder/ --pixels-per-micron 2.25 --output ./data
+  python main.py --input /path/to/image.jpg
+  python main.py --input /path/to/folder/ --output ./data
 """
 
 import sys
 import click
 from tqdm import tqdm
-from pathlib import Path
 
 from src import io_utils, pipeline
 
@@ -19,29 +18,30 @@ from src import io_utils, pipeline
               help="输入图像文件路径或文件夹路径")
 @click.option("--output", "-o", "output_dir", default="./data", show_default=True,
               help="输出根目录")
-@click.option("--pixels-per-micron", "-p", default=2.25, show_default=True,
-              type=float, help="分辨率：像素/微米（500X 数据集默认 2.25）")
 # 预处理参数
-@click.option("--gaussian-sigma", default=3.0, show_default=True,
-              type=float, help="高斯滤波标准差")
+@click.option("--smooth-mode", default="gaussian", show_default=True,
+              type=click.Choice(["gaussian", "bilateral", "anisotropic"]),
+              help="平滑模式：gaussian（默认）/ bilateral（双边）/ anisotropic（各向异性扩散）")
+@click.option("--gaussian-sigma", default=None, show_default=True,
+              type=float, help="预处理高斯滤波标准差（不设则自动估计）")
 @click.option("--median-kernel", default=3, show_default=True,
               type=int, help="中值滤波核大小（奇数）")
 @click.option("--clahe-clip", default=2.0, show_default=True,
               type=float, help="CLAHE 对比度限制")
 # 分割参数
-@click.option("--min-distance", default=50, show_default=True,
-              type=int, help="Watershed marker 最小间距（像素）")
+@click.option("--min-distance", default=None, show_default=True,
+              type=int, help="Watershed marker 最小间距（像素），不设则按图像尺寸自动估算")
 @click.option("--closing-disk", default=2, show_default=True,
-              type=int, help="形态学闭运算核半径")
+              type=int, help="形态学闭运算核半径（增大可连接断裂晶界）")
+@click.option("--opening-disk", default=1, show_default=True,
+              type=int, help="形态学开运算核半径（增大可消除划痕，如 2~4）")
 @click.option("--min-grain-area", default=None, type=int,
-              help="最小晶粒面积（像素²），不设则自动估算")
+              help="最小晶粒面积（像素²），不设则默认 10")
 @click.option("--remove-border/--keep-border", default=False, show_default=True,
               help="是否移除接触边界的晶粒")
 # 截线法参数
-@click.option("--n-lines-h", default=5, show_default=True,
-              type=int, help="截线法水平线数量")
-@click.option("--n-lines-v", default=5, show_default=True,
-              type=int, help="截线法垂直线数量")
+@click.option("--pixels-per-micron", default=1.0, show_default=True,
+              type=float, help="像素/微米换算系数（如 500X 不锈钢 2.25 px/μm）")
 # 异常检测参数
 @click.option("--rule-a-threshold", default=3.0, show_default=True,
               type=float, help="规则A：d_max/d_avg 阈值")
@@ -49,10 +49,9 @@ from src import io_utils, pipeline
               type=float, help="规则B：检测前 X% 大晶粒")
 @click.option("--rule-b-area-frac", default=0.30, show_default=True,
               type=float, help="规则B：面积占比阈值")
-def main(input_path, output_dir, pixels_per_micron,
-         gaussian_sigma, median_kernel, clahe_clip,
-         min_distance, closing_disk, min_grain_area, remove_border,
-         n_lines_h, n_lines_v,
+def main(input_path, output_dir, smooth_mode, gaussian_sigma, median_kernel, clahe_clip,
+         min_distance, closing_disk, opening_disk, min_grain_area, remove_border,
+         pixels_per_micron,
          rule_a_threshold, rule_b_top_pct, rule_b_area_frac):
     """晶粒自动化分析系统 — ASTM E112 面积法 + 截线法"""
 
@@ -75,18 +74,17 @@ def main(input_path, output_dir, pixels_per_micron,
         try:
             result = pipeline.run(
                 image_path=img_path,
-                pixels_per_micron=pixels_per_micron,
                 output_dir=output_dir,
+                smooth_mode=smooth_mode,
                 gaussian_sigma=gaussian_sigma,
                 median_kernel=median_kernel,
                 clahe_clip_limit=clahe_clip,
-                seg_gaussian_sigma=gaussian_sigma,
                 min_distance=min_distance,
                 closing_disk_size=closing_disk,
+                opening_disk_size=opening_disk,
                 min_grain_area=min_grain_area,
                 remove_border=remove_border,
-                n_lines_h=n_lines_h,
-                n_lines_v=n_lines_v,
+                pixels_per_micron=pixels_per_micron,
                 rule_a_threshold=rule_a_threshold,
                 rule_b_top_pct=rule_b_top_pct,
                 rule_b_area_frac=rule_b_area_frac,

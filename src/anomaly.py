@@ -32,7 +32,7 @@ class RuleBResult:
 @dataclass
 class RuleCResult:
     triggered: bool
-    threshold_um: float
+    threshold_px: float
     anomalous_grain_ids: List[int] = field(default_factory=list)
 
 
@@ -70,12 +70,12 @@ def detect_anomalies(grain_props: List[GrainProps],
         empty_c = RuleCResult(False, 0.0)
         return AnomalyResult(False, empty_a, empty_b, empty_c, 0)
 
-    diameters = np.array([g.equivalent_diameter_um for g in grain_props])
-    areas = np.array([g.area_um2 for g in grain_props])
+    diameters = np.array([g.equivalent_diameter_px for g in grain_props])
+    areas = np.array([g.area_px2 for g in grain_props])
     ids = np.array([g.grain_id for g in grain_props])
 
-    d_avg = stats.mean_diameter_um
-    d_max = stats.max_diameter_um
+    d_avg = stats.mean_diameter_px
+    d_max = stats.max_diameter_px
 
     # ── 规则 A：尺寸比法 ──────────────────────────────────────────
     ratio = d_max / d_avg if d_avg > 0 else 0.0
@@ -106,15 +106,15 @@ def detect_anomalies(grain_props: List[GrainProps],
     )
 
     # ── 规则 C：3σ 偏离法 ─────────────────────────────────────────
-    mu = stats.mean_diameter_um
-    sigma = stats.std_diameter_um
+    mu = stats.mean_diameter_px
+    sigma = stats.std_diameter_px
     threshold_c = mu + 3 * sigma
     rule_c_anomalous_mask = diameters > threshold_c
     rule_c_triggered = bool(rule_c_anomalous_mask.any())
     rule_c_anomalous = ids[rule_c_anomalous_mask].tolist()
     rule_c = RuleCResult(
         triggered=rule_c_triggered,
-        threshold_um=round(threshold_c, 2),
+        threshold_px=round(threshold_c, 2),
         anomalous_grain_ids=rule_c_anomalous,
     )
 

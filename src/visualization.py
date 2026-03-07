@@ -92,7 +92,7 @@ def save_area_method(image: np.ndarray, labels: np.ndarray,
 
     # 统计文字
     info = (f"N_inside={result.n_inside}, N_intersect={result.n_intersect}\n"
-            f"N_eq={result.n_equivalent:.1f}, N_A={result.n_a_per_mm2:.0f}/mm²\n"
+            f"N_eq={result.n_equivalent:.1f}, N_A={result.n_a_per_mm2:.1f}/mm²\n"
             f"ASTM G = {result.astm_g_value:.2f}")
     ax.text(5, 15, info, fontsize=8, color="yellow",
             verticalalignment="top",
@@ -108,37 +108,42 @@ def save_area_method(image: np.ndarray, labels: np.ndarray,
 def save_intercept_method(image: np.ndarray,
                           result: InterceptMethodResult,
                           output_path: str) -> None:
-    """在图像上绘制网格测试线与交点标注。"""
+    """在图像上绘制 ASTM E112 标准测试图案（4线+3圆）与交点标注。"""
     if image.ndim == 3:
         rgb = image[..., ::-1].copy()
     else:
         rgb = np.stack([image] * 3, axis=-1)
 
-    h, w = image.shape[:2]
     fig, ax = plt.subplots(figsize=(7, 6))
     ax.imshow(rgb)
 
-    # 绘制测试线
-    for orientation, pos in result.line_coords:
-        if orientation == 'h':
-            ax.axhline(y=pos, color="cyan", linewidth=0.8, alpha=0.8)
-        else:
-            ax.axvline(x=pos, color="cyan", linewidth=0.8, alpha=0.8)
+    # 绘制测试图案
+    for elem in result.pattern_elements:
+        if elem[0] == 'line':
+            _, r1, c1, r2, c2 = elem
+            ax.plot([c1, c2], [r1, r2], color="cyan", linewidth=0.9, alpha=0.85)
+        elif elem[0] == 'circle':
+            _, r_c, c_c, radius = elem
+            circle = mpatches.Circle(
+                (c_c, r_c), radius,
+                fill=False, edgecolor="cyan", linewidth=0.9, alpha=0.85,
+            )
+            ax.add_patch(circle)
 
     # 绘制交点（红点）
     if result.intersection_points:
         pts = np.array(result.intersection_points)
-        ax.scatter(pts[:, 1], pts[:, 0], s=4, c="red", zorder=5)
+        ax.scatter(pts[:, 1], pts[:, 0], s=15, c="red", marker="o", zorder=5)
 
     info = (f"Intersections={result.total_intersections}\n"
-            f"L_total={result.total_line_length_um:.0f} μm\n"
+            f"L_total={result.total_line_length_px:.0f} px\n"
             f"l̄={result.mean_intercept_length_um:.2f} μm\n"
             f"ASTM G = {result.astm_g_value:.2f}")
     ax.text(5, 15, info, fontsize=8, color="cyan",
             verticalalignment="top",
             bbox=dict(facecolor="black", alpha=0.5, pad=2))
 
-    ax.set_title("Intercept Method (Heyn)")
+    ax.set_title("Intercept Method — ASTM E112 (4 lines + 3 circles)")
     ax.axis("off")
     _save(fig, output_path)
 
@@ -196,17 +201,17 @@ def save_distribution(stats: GrainStatistics, output_path: str) -> None:
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.hist(diameters, bins=30, color="steelblue", edgecolor="white", alpha=0.85)
-    ax.axvline(stats.mean_diameter_um, color="red", linestyle="--",
-               linewidth=1.5, label=f"Mean={stats.mean_diameter_um:.1f} μm")
-    ax.axvline(stats.median_diameter_um, color="orange", linestyle=":",
-               linewidth=1.5, label=f"Median={stats.median_diameter_um:.1f} μm")
+    ax.axvline(stats.mean_diameter_px, color="red", linestyle="--",
+               linewidth=1.5, label=f"Mean={stats.mean_diameter_px:.1f} px")
+    ax.axvline(stats.median_diameter_px, color="orange", linestyle=":",
+               linewidth=1.5, label=f"Median={stats.median_diameter_px:.1f} px")
 
     # 3σ 阈值
-    threshold_3sigma = stats.mean_diameter_um + 3 * stats.std_diameter_um
+    threshold_3sigma = stats.mean_diameter_px + 3 * stats.std_diameter_px
     ax.axvline(threshold_3sigma, color="purple", linestyle="-.",
-               linewidth=1.2, label=f"μ+3σ={threshold_3sigma:.1f} μm")
+               linewidth=1.2, label=f"μ+3σ={threshold_3sigma:.1f} px")
 
-    ax.set_xlabel("Equivalent Diameter (μm)")
+    ax.set_xlabel("Equivalent Diameter (px)")
     ax.set_ylabel("Count")
     ax.set_title(f"Grain Size Distribution  (n={stats.count})")
     ax.legend(fontsize=8)

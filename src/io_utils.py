@@ -92,6 +92,8 @@ def output_paths(out_dir: Path, name: str) -> dict:
 
 def _to_serializable(obj):
     """递归将 numpy 类型转为 Python 原生类型。"""
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
     if isinstance(obj, (np.integer,)):
         return int(obj)
     if isinstance(obj, (np.floating,)):
@@ -109,7 +111,6 @@ def save_results_json(
     output_path: str,
     image_name: str,
     image_path: str,
-    pixels_per_micron: float,
     segmentation_params: dict,
     total_grains: int,
     stats: GrainStatistics,
@@ -138,13 +139,13 @@ def save_results_json(
         return {
             "triggered": r.triggered,
             "anomalous_grain_ids": r.anomalous_grain_ids,
-            "threshold_um": r.threshold_um,
+            "threshold_px": r.threshold_px,
         }
 
     result = {
         "image_name": image_name,
         "image_path": image_path,
-        "pixels_per_micron": pixels_per_micron,
+        "measurement_mode": "pixel",
         "segmentation": {
             "method": "watershed",
             "total_grains": total_grains,
@@ -152,15 +153,15 @@ def save_results_json(
         },
         "grain_statistics": {
             "count": stats.count,
-            "mean_diameter_um": round(stats.mean_diameter_um, 3),
-            "std_diameter_um": round(stats.std_diameter_um, 3),
-            "min_diameter_um": round(stats.min_diameter_um, 3),
-            "max_diameter_um": round(stats.max_diameter_um, 3),
-            "median_diameter_um": round(stats.median_diameter_um, 3),
-            "p10_diameter_um": round(stats.p10_diameter_um, 3),
-            "p90_diameter_um": round(stats.p90_diameter_um, 3),
-            "mean_area_um2": round(stats.mean_area_um2, 3),
-            "total_area_um2": round(stats.total_area_um2, 3),
+            "mean_diameter_px": round(stats.mean_diameter_px, 3),
+            "std_diameter_px": round(stats.std_diameter_px, 3),
+            "min_diameter_px": round(stats.min_diameter_px, 3),
+            "max_diameter_px": round(stats.max_diameter_px, 3),
+            "median_diameter_px": round(stats.median_diameter_px, 3),
+            "p10_diameter_px": round(stats.p10_diameter_px, 3),
+            "p90_diameter_px": round(stats.p90_diameter_px, 3),
+            "mean_area_px2": round(stats.mean_area_px2, 3),
+            "total_area_px2": round(stats.total_area_px2, 3),
         },
         "area_method": {
             "n_inside": area_result.n_inside,
@@ -172,11 +173,12 @@ def save_results_json(
             "mean_diameter_um": round(area_result.mean_diameter_um, 3),
         },
         "intercept_method": {
-            "n_lines_horizontal": intercept_result.n_lines_horizontal,
-            "n_lines_vertical": intercept_result.n_lines_vertical,
+            "n_lines": intercept_result.n_lines,
+            "n_circles": intercept_result.n_circles,
             "total_intersections": intercept_result.total_intersections,
-            "total_line_length_um": round(intercept_result.total_line_length_um, 2),
-            "n_l_per_mm": round(intercept_result.n_l_per_mm, 3),
+            "total_line_length_px": round(intercept_result.total_line_length_px, 2),
+            "n_l_per_px": round(intercept_result.n_l_per_px, 6),
+            "mean_intercept_length_px": round(intercept_result.mean_intercept_length_px, 3),
             "mean_intercept_length_um": round(intercept_result.mean_intercept_length_um, 3),
             "astm_g_value": round(intercept_result.astm_g_value, 3),
         },
