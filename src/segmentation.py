@@ -127,35 +127,6 @@ def _fill_unseeded_regions(seed_mask: np.ndarray,
         result[best_idx] = True
     return result
 
-
-def _add_border_seeds(seed_mask: np.ndarray,
-                      grain_mask: np.ndarray,
-                      distance: np.ndarray) -> np.ndarray:
-    """为接触图像边界但没有 marker 的连通晶粒区域在距离最大处补种。"""
-    result = seed_mask.copy()
-    region_labels = np.asarray(cast(Tuple[np.ndarray, int], ndi.label(grain_mask))[0])
-
-    # 收集接触四条边的连通区域 ID
-    border_ids: set[int] = set()
-    border_ids.update(np.unique(region_labels[0, :]).tolist())
-    border_ids.update(np.unique(region_labels[-1, :]).tolist())
-    border_ids.update(np.unique(region_labels[:, 0]).tolist())
-    border_ids.update(np.unique(region_labels[:, -1]).tolist())
-    border_ids.discard(0)
-
-    for rid in border_ids:
-        region = region_labels == rid
-        # 该区域内已有 marker，无需补种
-        if result[region].any():
-            continue
-        # 在该区域内距离变换最大处补种
-        dist_in_region = np.where(region, distance, -1.0)
-        best_idx = np.unravel_index(int(dist_in_region.argmax()), dist_in_region.shape)
-        result[best_idx] = True
-
-    return result
-
-
 def _remove_small_grains(labels: np.ndarray, min_area: int) -> np.ndarray:
     """移除面积小于 min_area 的晶粒区域。"""
     result = labels.copy()
