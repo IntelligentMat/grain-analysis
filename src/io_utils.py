@@ -11,8 +11,7 @@ import json
 import numpy as np
 import cv2
 from pathlib import Path
-from dataclasses import asdict
-from typing import List, Optional
+from typing import Any, List
 
 from src.analysis import GrainStatistics, AreaMethodResult, InterceptMethodResult
 from src.anomaly import AnomalyResult
@@ -84,6 +83,7 @@ def output_paths(out_dir: Path, name: str) -> dict:
         "intercept": str(out_dir / f"{name}_intercept_method.png"),
         "anomaly":   str(out_dir / f"{name}_anomaly.png"),
         "distribution": str(out_dir / f"{name}_distribution.png"),
+        "labels":    str(out_dir / f"{name}_labels.npy"),
         "json":      str(out_dir / f"{name}_results.json"),
     }
 
@@ -107,10 +107,23 @@ def _to_serializable(obj):
     return obj
 
 
+def save_labels(output_path: str, labels: np.ndarray) -> None:
+    """保存分割标签矩阵，供后续重绘使用。"""
+    np.save(output_path, labels)
+
+
+def load_results_json(results_json_path: str) -> dict[str, Any]:
+    """读取结果 JSON。"""
+    with open(results_json_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def save_results_json(
     output_path: str,
+    labels_path: str,
     image_name: str,
     image_path: str,
+    image_shape: tuple[int, ...],
     segmentation_params: dict,
     total_grains: int,
     stats: GrainStatistics,
@@ -146,6 +159,12 @@ def save_results_json(
         "image_name": image_name,
         "image_path": image_path,
         "measurement_mode": "pixel",
+        "image": {
+            "shape": list(image_shape),
+        },
+        "artifacts": {
+            "labels_path": labels_path,
+        },
         "segmentation": {
             "method": "watershed",
             "total_grains": total_grains,
@@ -162,6 +181,7 @@ def save_results_json(
             "p90_diameter_px": round(stats.p90_diameter_px, 3),
             "mean_area_px2": round(stats.mean_area_px2, 3),
             "total_area_px2": round(stats.total_area_px2, 3),
+            "diameters": [round(d, 3) for d in stats.diameters],
         },
         "area_method": {
             "n_inside": area_result.n_inside,
@@ -171,6 +191,8 @@ def save_results_json(
             "astm_g_value": round(area_result.astm_g_value, 3),
             "mean_grain_area_mm2": area_result.mean_grain_area_mm2,
             "mean_diameter_um": round(area_result.mean_diameter_um, 3),
+            "inside_grain_ids": area_result.inside_grain_ids,
+            "intersect_grain_ids": area_result.intersect_grain_ids,
         },
         "intercept_method": {
             "n_lines": intercept_result.n_lines,
@@ -181,6 +203,9 @@ def save_results_json(
             "mean_intercept_length_px": round(intercept_result.mean_intercept_length_px, 3),
             "mean_intercept_length_um": round(intercept_result.mean_intercept_length_um, 3),
             "astm_g_value": round(intercept_result.astm_g_value, 3),
+            "pattern_elements": intercept_result.pattern_elements,
+            "intersection_points": intercept_result.intersection_points,
+            "intersected_grain_ids": intercept_result.intersected_grain_ids,
         },
         "anomaly_detection": {
             "has_anomaly": anomaly_result.has_anomaly,
@@ -188,6 +213,7 @@ def save_results_json(
             "rule_b": _rule_b(anomaly_result.rule_b),
             "rule_c": _rule_c(anomaly_result.rule_c),
             "total_anomalous_grains": anomaly_result.total_anomalous_grains,
+            "anomalous_grain_ids": anomaly_result.anomalous_grain_ids,
         },
     }
 

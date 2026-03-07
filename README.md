@@ -44,6 +44,14 @@ python main.py \
   --output ./data
 ```
 
+### 根据结果工件重绘
+
+```bash
+python main.py \
+  --render-from-results ./data/RG36_2_1/RG36_2_1_results.json \
+  --output ./data
+```
+
 ### 使用双边滤波抑制划痕
 
 ```bash
@@ -66,6 +74,7 @@ python main.py [OPTIONS]
 | 参数 | 缩写 | 说明 |
 |---|---|---|
 | `--input PATH` | `-i` | 输入图像文件或文件夹路径 |
+| `--render-from-results PATH` |  | 根据已有 `results.json` 重绘可视化 |
 
 ### 通用参数
 
@@ -168,6 +177,7 @@ data/{image_name}/
 ├── {name}_intercept_method.png  # 截线法标注图（ASTM 4线+3圆，红点为交点）
 ├── {name}_anomaly.png           # 异常晶粒高亮图（红色标注）
 ├── {name}_distribution.png      # 晶粒尺寸分布直方图
+├── {name}_labels.npy            # 完整标签矩阵（供重绘使用）
 └── {name}_results.json          # 完整分析结果（JSON）
 ```
 
@@ -178,7 +188,8 @@ data/{image_name}/
   "grain_statistics": {
     "count": 35,
     "mean_diameter_px": 45.2,
-    "std_diameter_px": 12.1
+    "std_diameter_px": 12.1,
+    "diameters": [31.8, 40.4, 58.2]
   },
   "area_method": {
     "n_inside": 27,
@@ -187,7 +198,9 @@ data/{image_name}/
     "n_a_per_mm2": 1059.96,
     "astm_g_value": 7.10,
     "mean_grain_area_mm2": 9.44e-4,
-    "mean_diameter_um": 34.66
+    "mean_diameter_um": 34.66,
+    "inside_grain_ids": [1, 2, 3],
+    "intersect_grain_ids": [4, 5]
   },
   "intercept_method": {
     "n_lines": 4,
@@ -195,11 +208,15 @@ data/{image_name}/
     "total_intersections": 63,
     "total_line_length_px": 3053,
     "mean_intercept_length_um": 48.5,
-    "astm_g_value": 5.14
+    "astm_g_value": 5.14,
+    "pattern_elements": [["line", 10, 10, 10, 200]],
+    "intersection_points": [[10, 25], [10, 57]],
+    "intersected_grain_ids": [2, 5, 8]
   },
   "anomaly_detection": {
     "has_anomaly": true,
-    "total_anomalous_grains": 2
+    "total_anomalous_grains": 2,
+    "anomalous_grain_ids": [8, 13]
   }
 }
 ```

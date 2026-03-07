@@ -7,15 +7,19 @@ main.py — CLI 入口
 """
 
 import sys
+from pathlib import Path
+
 import click
 from tqdm import tqdm
 
-from src import io_utils, pipeline
+from src import io_utils, pipeline, visualization
 
 
 @click.command()
-@click.option("--input", "-i", "input_path", required=True,
-              help="输入图像文件路径或文件夹路径")
+@click.option("--input", "-i", "input_path",
+              help="输入图像文件或文件夹路径")
+@click.option("--render-from-results", "render_results_path", default=None,
+              help="根据已有 results.json 重绘可视化")
 @click.option("--output", "-o", "output_dir", default="./data", show_default=True,
               help="输出根目录")
 # 预处理参数
@@ -42,6 +46,8 @@ from src import io_utils, pipeline
 # 截线法参数
 @click.option("--pixels-per-micron", default=1.0, show_default=True,
               type=float, help="像素/微米换算系数（如 500X 不锈钢 2.25 px/μm）")
+@click.option("--min-intercept-px", default=3, show_default=True,
+              type=int, help="最小有效截段长度（px）")
 # 异常检测参数
 @click.option("--rule-a-threshold", default=3.0, show_default=True,
               type=float, help="规则A：d_max/d_avg 阈值")
@@ -49,11 +55,24 @@ from src import io_utils, pipeline
               type=float, help="规则B：检测前 X% 大晶粒")
 @click.option("--rule-b-area-frac", default=0.30, show_default=True,
               type=float, help="规则B：面积占比阈值")
-def main(input_path, output_dir, smooth_mode, gaussian_sigma, median_kernel, clahe_clip,
+def main(input_path, render_results_path, output_dir, smooth_mode, gaussian_sigma, median_kernel, clahe_clip,
          min_distance, closing_disk, opening_disk, min_grain_area, remove_border,
-         pixels_per_micron,
+         pixels_per_micron, min_intercept_px,
          rule_a_threshold, rule_b_top_pct, rule_b_area_frac):
     """晶粒自动化分析系统 — ASTM E112 面积法 + 截线法"""
+
+    if bool(input_path) == bool(render_results_path):
+        click.echo("[ERROR] 请二选一提供 --input 或 --render-from-results。", err=True)
+        sys.exit(1)
+
+    if render_results_path:
+        try:
+            paths = visualization.render_all_from_results(render_results_path, output_dir=output_dir)
+        except Exception as exc:
+            click.echo(f"[ERROR] 重绘失败: {exc}", err=True)
+            sys.exit(1)
+        click.echo(f"重绘完成，结果目录：{Path(paths['json']).parent}")
+        return
 
     # 收集图像文件
     try:
@@ -85,6 +104,7 @@ def main(input_path, output_dir, smooth_mode, gaussian_sigma, median_kernel, cla
                 min_grain_area=min_grain_area,
                 remove_border=remove_border,
                 pixels_per_micron=pixels_per_micron,
+                min_intercept_px=min_intercept_px,
                 rule_a_threshold=rule_a_threshold,
                 rule_b_top_pct=rule_b_top_pct,
                 rule_b_area_frac=rule_b_area_frac,

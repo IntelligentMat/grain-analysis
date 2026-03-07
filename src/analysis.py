@@ -54,6 +54,8 @@ class AreaMethodResult:
     astm_g_value: float           # ASTM E112 对应的 G 值
     mean_grain_area_mm2: float    # 平均晶粒面积（mm²）
     mean_diameter_um: float       # 面积法推导的平均等效直径（μm）
+    inside_grain_ids: List[int] = field(default_factory=list)
+    intersect_grain_ids: List[int] = field(default_factory=list)
 
 
 @dataclass
@@ -69,6 +71,7 @@ class InterceptMethodResult:
     pattern_elements: List[tuple] = field(default_factory=list)
     # ('line', r1,c1,r2,c2) 或 ('circle', r_c,c_c,radius)，用于可视化
     intersection_points: List[tuple] = field(default_factory=list)  # 交点坐标（用于可视化）
+    intersected_grain_ids: List[int] = field(default_factory=list)
 
 
 # ─────────────────────────── 特征提取 ──────────────────────────────
@@ -167,8 +170,11 @@ def area_method(labels: np.ndarray,
 
     all_ids = set(np.unique(labels)) - {0}
 
-    n_intersect = len(border_ids)
-    n_inside = len(all_ids - border_ids)
+    inside_ids = sorted(all_ids - border_ids)
+    intersect_ids = sorted(border_ids)
+
+    n_intersect = len(intersect_ids)
+    n_inside = len(inside_ids)
 
     n_equivalent = n_inside + 0.5 * n_intersect
     area_um2 = area_px / (pixels_per_micron ** 2)           # px² → μm²
@@ -190,6 +196,8 @@ def area_method(labels: np.ndarray,
         astm_g_value=g_value,
         mean_grain_area_mm2=mean_grain_area_mm2,
         mean_diameter_um=mean_diameter_um,
+        inside_grain_ids=inside_ids,
+        intersect_grain_ids=intersect_ids,
     )
 
 
@@ -225,6 +233,7 @@ def intercept_method(labels: np.ndarray,
     total_length_px = 0.0
     pattern_elements: List[tuple] = []
     intersection_points: List[tuple] = []
+    intersected_grain_ids: set[int] = set()
 
     # ── 4 条测试线 ────────────────────────────────────────────────────
     line_defs = [
@@ -238,6 +247,7 @@ def intercept_method(labels: np.ndarray,
         mask = (rr >= 0) & (rr < height) & (cc >= 0) & (cc < width)
         rr, cc = rr[mask], cc[mask]
         line_labels = labels[rr, cc]
+        intersected_grain_ids.update(int(lbl) for lbl in np.unique(line_labels) if lbl != 0)
 
         total_intersections += _count_crossings(line_labels, min_intercept_px,
                                                  is_closed=False)
@@ -255,6 +265,7 @@ def intercept_method(labels: np.ndarray,
         rr, cc = skdraw.circle_perimeter(r_c, c_c, radius, shape=labels.shape)
         rr, cc = _sort_circle_pixels(rr, cc, r_c, c_c)
         circ_labels = labels[rr, cc]
+        intersected_grain_ids.update(int(lbl) for lbl in np.unique(circ_labels) if lbl != 0)
 
         total_intersections += _count_crossings(circ_labels, min_intercept_px,
                                                  is_closed=True)
@@ -282,6 +293,7 @@ def intercept_method(labels: np.ndarray,
         astm_g_value=g_value,
         pattern_elements=pattern_elements,
         intersection_points=intersection_points,
+        intersected_grain_ids=sorted(intersected_grain_ids),
     )
 
 

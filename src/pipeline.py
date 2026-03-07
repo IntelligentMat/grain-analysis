@@ -93,13 +93,8 @@ def run(image_path: str,
     out_dir = io_utils.make_output_dir(output_dir, image_name)
     paths = io_utils.output_paths(out_dir, image_name)
 
-    # ── 8. 可视化 ─────────────────────────────────────────────────
-    visualization.save_original(image, paths["original"])
-    visualization.save_segmented(image, labels, paths["segmented"])
-    visualization.save_area_method(image, labels, area_result, paths["area"])
-    visualization.save_intercept_method(image, intercept_result, paths["intercept"])
-    visualization.save_anomaly(image, labels, anomaly_result, paths["anomaly"])
-    visualization.save_distribution(stats, paths["distribution"])
+    # ── 8. 结果工件导出 ───────────────────────────────────────────
+    io_utils.save_labels(paths["labels"], labels)
 
     # ── 9. JSON 结果 ──────────────────────────────────────────────
     effective_min_distance = segmentation._auto_min_distance(enhanced.shape, min_distance)
@@ -116,8 +111,10 @@ def run(image_path: str,
     }
     io_utils.save_results_json(
         output_path=paths["json"],
+        labels_path=str(Path(paths["labels"]).resolve()),
         image_name=image_name,
-        image_path=str(image_path),
+        image_path=str(Path(image_path).resolve()),
+        image_shape=image.shape,
         segmentation_params=seg_params,
         total_grains=total_grains,
         stats=stats,
@@ -125,6 +122,9 @@ def run(image_path: str,
         intercept_result=intercept_result,
         anomaly_result=anomaly_result,
     )
+
+    # ── 10. 根据结果工件重绘可视化 ────────────────────────────────
+    visualization.render_all_from_results(paths["json"])
 
     return {
         "image_name": image_name,           # 图像文件名（不含扩展名），如 "RG36_2_1"

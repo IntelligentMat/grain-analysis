@@ -10,19 +10,20 @@ visualization.py — 结果可视化与标注模块
   {name}_distribution.png    晶粒尺寸分布直方图
 """
 
-import numpy as np
+from pathlib import Path
+from typing import Optional
+
 import matplotlib
-from matplotlib.figure import Figure
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.colors import ListedColormap
-from pathlib import Path
+import numpy as np
+from matplotlib.figure import Figure
 from skimage.color import label2rgb
-from typing import Optional
+from skimage.measure import regionprops
+from skimage.segmentation import find_boundaries
 
-from src.analysis import AreaMethodResult, InterceptMethodResult, GrainStatistics
-from src.anomaly import AnomalyResult
+from src import io_utils
 
 
 def _save(fig: Figure, path: str) -> None:
@@ -30,32 +31,92 @@ def _save(fig: Figure, path: str) -> None:
     plt.close(fig)
 
 
-# ─────────────────────────── 原始图像 ──────────────────────────────
+def _as_rgb(image: np.ndarray) -> np.ndarray:
+    if image.ndim == 3:
+        return image[..., ::-1].copy()
+    return np.stack([image] * 3, axis=-1)
+
+
+def _resolve_artifact_path(results_json_path: str, raw_path: str) -> Path:
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+
+    json_dir = Path(results_json_path).resolve().parent
+    candidates = [
+        json_dir / path,
+        Path(raw_path).resolve(),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _label_centroids(labels: np.ndarray) -> dict[int, tuple[float, float]]:
+    return {
+        int(prop.label): (float(prop.centroid[0]), float(prop.centroid[1]))
+        for prop in regionprops(labels)
+    }
+
+
+def _tint_mask(rgb: np.ndarray,
+               labels: np.ndarray,
+               grain_ids: list[int],
+               color: tuple[float, float, float],
+               alpha: float = 0.38) -> np.ndarray:
+    tinted = rgb.astype(np.float32) / 255.0
+    if not grain_ids:
+        return tinted
+
+    color_arr = np.array(color, dtype=np.float32)
+    mask = np.isin(labels, grain_ids)
+    tinted[mask] = (1 - alpha) * tinted[mask] + alpha * color_arr
+    return tinted
+
+
+def _overlay_boundaries(image: np.ndarray,
+                        labels: np.ndarray,
+                        color: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> np.ndarray:
+    overlay = image.copy()
+    boundaries = find_boundaries(labels, mode="outer")
+    overlay[boundaries] = color
+    return overlay
+
+
+def _annotate_grain_ids(ax, labels: np.ndarray, grain_ids: list[int], text_color: str) -> None:
+    centroids = _label_centroids(labels)
+    for grain_id in grain_ids:
+        centroid = centroids.get(int(grain_id))
+        if centroid is None:
+            continue
+        row, col = centroid
+        ax.text(
+            col,
+            row,
+            str(grain_id),
+            color=text_color,
+            fontsize=7,
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="black", alpha=0.45, pad=1.2, edgecolor="none"),
+            zorder=6,
+        )
+
 
 def save_original(image: np.ndarray, output_path: str) -> None:
     """保存原始图像（彩色或灰度）。"""
     fig, ax = plt.subplots(figsize=(6, 5))
-    if image.ndim == 3:
-        ax.imshow(image[..., ::-1])   # BGR → RGB
-    else:
-        ax.imshow(image, cmap="gray")
+    ax.imshow(_as_rgb(image))
     ax.set_title("Original Image")
     ax.axis("off")
     _save(fig, output_path)
 
 
-# ─────────────────────────── 分割结果 ──────────────────────────────
-
-def save_segmented(image: np.ndarray, labels: np.ndarray,
-                   output_path: str) -> None:
+def save_segmented(image: np.ndarray, labels: np.ndarray, output_path: str) -> None:
     """将晶粒分割标签叠加到原始图像上（伪彩色）。"""
-    if image.ndim == 3:
-        bg = image[..., ::-1].copy()   # BGR → RGB
-    else:
-        bg = np.stack([image] * 3, axis=-1)
-
-    overlay = label2rgb(labels, image=bg, alpha=0.4,
-                        bg_label=0, bg_color=(0, 0, 0))
+    bg = _as_rgb(image)
+    overlay = label2rgb(labels, image=bg, alpha=0.4, bg_label=0, bg_color=(0, 0, 0))
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     axes[0].imshow(bg)
@@ -70,100 +131,106 @@ def save_segmented(image: np.ndarray, labels: np.ndarray,
     _save(fig, output_path)
 
 
-# ─────────────────────────── 面积法 ────────────────────────────────
+def render_area_method(image: np.ndarray, labels: np.ndarray, results: dict, output_path: str) -> None:
+    """根据结果工件重绘面积法可视化。"""
+    rgb = _as_rgb(image)
+    area_result = results["area_method"]
+    inside_ids = area_result.get("inside_grain_ids", [])
+    intersect_ids = area_result.get("intersect_grain_ids", [])
 
-def save_area_method(image: np.ndarray, labels: np.ndarray,
-                     result: AreaMethodResult, output_path: str) -> None:
-    """标注面积法测量区域（全图矩形）与统计结果。"""
-    if image.ndim == 3:
-        rgb = image[..., ::-1].copy()
-    else:
-        rgb = np.stack([image] * 3, axis=-1)
+    tinted = _tint_mask(rgb, labels, inside_ids, (0.18, 0.85, 0.35), alpha=0.35)
+    tinted = _tint_mask((tinted * 255).astype(np.uint8), labels, intersect_ids, (1.0, 0.6, 0.0), alpha=0.40)
+    tinted = _overlay_boundaries(tinted, labels)
 
     h, w = labels.shape
     fig, ax = plt.subplots(figsize=(7, 6))
-    ax.imshow(rgb)
+    ax.imshow(tinted)
 
-    # 绘制测量区域边框
     rect = mpatches.Rectangle((0, 0), w - 1, h - 1,
-                                linewidth=2, edgecolor="yellow",
-                                facecolor="none")
+                              linewidth=2, edgecolor="yellow",
+                              facecolor="none")
     ax.add_patch(rect)
 
-    # 统计文字
-    info = (f"N_inside={result.n_inside}, N_intersect={result.n_intersect}\n"
-            f"N_eq={result.n_equivalent:.1f}, N_A={result.n_a_per_mm2:.1f}/mm²\n"
-            f"ASTM G = {result.astm_g_value:.2f}")
+    _annotate_grain_ids(ax, labels, inside_ids, text_color="#90ee90")
+    _annotate_grain_ids(ax, labels, intersect_ids, text_color="#ffd27f")
+
+    info = (
+        f"N_inside={area_result['n_inside']}, N_intersect={area_result['n_intersect']}\n"
+        f"N_eq={area_result['n_equivalent']:.1f}, N_A={area_result['n_a_per_mm2']:.1f}/mm²\n"
+        f"ASTM G = {area_result['astm_g_value']:.2f}"
+    )
     ax.text(5, 15, info, fontsize=8, color="yellow",
             verticalalignment="top",
             bbox=dict(facecolor="black", alpha=0.5, pad=2))
 
+    legend_handles = [
+        mpatches.Patch(color=(0.18, 0.85, 0.35), label="Inside grains"),
+        mpatches.Patch(color=(1.0, 0.6, 0.0), label="Boundary-intersected grains"),
+    ]
+    ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.6)
     ax.set_title("Area Method (Planimetric / Jeffries)")
     ax.axis("off")
     _save(fig, output_path)
 
 
-# ─────────────────────────── 截线法 ────────────────────────────────
+def render_intercept_method(image: np.ndarray, labels: np.ndarray, results: dict, output_path: str) -> None:
+    """根据结果工件重绘截线法可视化。"""
+    rgb = _as_rgb(image)
+    intercept_result = results["intercept_method"]
+    intersected_ids = intercept_result.get("intersected_grain_ids", [])
 
-def save_intercept_method(image: np.ndarray,
-                          result: InterceptMethodResult,
-                          output_path: str) -> None:
-    """在图像上绘制 ASTM E112 标准测试图案（4线+3圆）与交点标注。"""
-    if image.ndim == 3:
-        rgb = image[..., ::-1].copy()
-    else:
-        rgb = np.stack([image] * 3, axis=-1)
+    tinted = _tint_mask(rgb, labels, intersected_ids, (0.95, 0.92, 0.25), alpha=0.32)
+    tinted = _overlay_boundaries(tinted, labels)
 
     fig, ax = plt.subplots(figsize=(7, 6))
-    ax.imshow(rgb)
+    ax.imshow(tinted)
 
-    # 绘制测试图案
-    for elem in result.pattern_elements:
-        if elem[0] == 'line':
+    for elem in intercept_result.get("pattern_elements", []):
+        if elem[0] == "line":
             _, r1, c1, r2, c2 = elem
-            ax.plot([c1, c2], [r1, r2], color="cyan", linewidth=0.9, alpha=0.85)
-        elif elem[0] == 'circle':
+            ax.plot([c1, c2], [r1, r2], color="cyan", linewidth=0.9, alpha=0.9)
+        elif elem[0] == "circle":
             _, r_c, c_c, radius = elem
-            circle = mpatches.Circle(
-                (c_c, r_c), radius,
-                fill=False, edgecolor="cyan", linewidth=0.9, alpha=0.85,
-            )
+            circle = mpatches.Circle((c_c, r_c), radius,
+                                     fill=False, edgecolor="cyan", linewidth=0.9, alpha=0.9)
             ax.add_patch(circle)
 
-    # 绘制交点（红点）
-    if result.intersection_points:
-        pts = np.array(result.intersection_points)
+    points = intercept_result.get("intersection_points", [])
+    if points:
+        pts = np.array(points)
         ax.scatter(pts[:, 1], pts[:, 0], s=15, c="red", marker="o", zorder=5)
 
-    info = (f"Intersections={result.total_intersections}\n"
-            f"L_total={result.total_line_length_px:.0f} px\n"
-            f"l̄={result.mean_intercept_length_um:.2f} μm\n"
-            f"ASTM G = {result.astm_g_value:.2f}")
+    _annotate_grain_ids(ax, labels, intersected_ids, text_color="#fff799")
+
+    info = (
+        f"Intersections={intercept_result['total_intersections']}\n"
+        f"L_total={intercept_result['total_line_length_px']:.0f} px\n"
+        f"l̄={intercept_result['mean_intercept_length_um']:.2f} μm\n"
+        f"ASTM G = {intercept_result['astm_g_value']:.2f}"
+    )
     ax.text(5, 15, info, fontsize=8, color="cyan",
             verticalalignment="top",
             bbox=dict(facecolor="black", alpha=0.5, pad=2))
 
+    legend_handles = [
+        mpatches.Patch(color=(0.95, 0.92, 0.25), label="Intercepted grains"),
+        mpatches.Patch(color="cyan", label="ASTM pattern"),
+        mpatches.Patch(color="red", label="Intersection points"),
+    ]
+    ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.6)
     ax.set_title("Intercept Method — ASTM E112 (4 lines + 3 circles)")
     ax.axis("off")
     _save(fig, output_path)
 
 
-# ─────────────────────────── 异常晶粒 ──────────────────────────────
+def render_anomaly(image: np.ndarray, labels: np.ndarray, results: dict, output_path: str) -> None:
+    """根据结果工件重绘异常晶粒可视化。"""
+    rgb = _as_rgb(image)
+    anomaly = results["anomaly_detection"]
+    anomaly_ids = anomaly.get("anomalous_grain_ids", [])
 
-def save_anomaly(image: np.ndarray, labels: np.ndarray,
-                 anomaly: AnomalyResult, output_path: str) -> None:
-    """高亮标注异常晶粒（红色覆盖）。"""
-    if image.ndim == 3:
-        rgb = image[..., ::-1].copy()
-    else:
-        rgb = np.stack([image] * 3, axis=-1)
-
-    overlay = label2rgb(labels, image=rgb, alpha=0.3,
-                        bg_label=0, bg_color=(0, 0, 0))
+    overlay = label2rgb(labels, image=rgb, alpha=0.3, bg_label=0, bg_color=(0, 0, 0))
     overlay_uint8 = (overlay * 255).astype(np.uint8)
-
-    # 将异常晶粒像素染红
-    anomaly_ids = set(anomaly.anomalous_grain_ids)
     for gid in anomaly_ids:
         mask = labels == gid
         overlay_uint8[mask, 0] = 220
@@ -172,13 +239,16 @@ def save_anomaly(image: np.ndarray, labels: np.ndarray,
 
     fig, ax = plt.subplots(figsize=(7, 6))
     ax.imshow(overlay_uint8)
+    _annotate_grain_ids(ax, labels, anomaly_ids, text_color="#ff8a8a")
 
-    flag = "YES" if anomaly.has_anomaly else "NO"
-    info = (f"Anomaly detected: {flag}\n"
-            f"Rule A: {'✓' if anomaly.rule_a.triggered else '✗'}  "
-            f"Rule B: {'✓' if anomaly.rule_b.triggered else '✗'}  "
-            f"Rule C: {'✓' if anomaly.rule_c.triggered else '✗'}\n"
-            f"Anomalous grains: {anomaly.total_anomalous_grains}")
+    flag = "YES" if anomaly["has_anomaly"] else "NO"
+    info = (
+        f"Anomaly detected: {flag}\n"
+        f"Rule A: {'✓' if anomaly['rule_a']['triggered'] else '✗'}  "
+        f"Rule B: {'✓' if anomaly['rule_b']['triggered'] else '✗'}  "
+        f"Rule C: {'✓' if anomaly['rule_c']['triggered'] else '✗'}\n"
+        f"Anomalous grains: {anomaly['total_anomalous_grains']}"
+    )
     ax.text(5, 15, info, fontsize=8, color="white",
             verticalalignment="top",
             bbox=dict(facecolor="black", alpha=0.5, pad=2))
@@ -188,11 +258,10 @@ def save_anomaly(image: np.ndarray, labels: np.ndarray,
     _save(fig, output_path)
 
 
-# ─────────────────────────── 尺寸分布 ──────────────────────────────
-
-def save_distribution(stats: GrainStatistics, output_path: str) -> None:
-    """绘制晶粒等效直径分布直方图。"""
-    diameters = stats.diameters
+def render_distribution(results: dict, output_path: str) -> None:
+    """根据结果工件重绘晶粒尺寸分布直方图。"""
+    stats = results["grain_statistics"]
+    diameters = stats.get("diameters", [])
     if not diameters:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "No grains detected", ha="center", va="center")
@@ -201,19 +270,48 @@ def save_distribution(stats: GrainStatistics, output_path: str) -> None:
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.hist(diameters, bins=30, color="steelblue", edgecolor="white", alpha=0.85)
-    ax.axvline(stats.mean_diameter_px, color="red", linestyle="--",
-               linewidth=1.5, label=f"Mean={stats.mean_diameter_px:.1f} px")
-    ax.axvline(stats.median_diameter_px, color="orange", linestyle=":",
-               linewidth=1.5, label=f"Median={stats.median_diameter_px:.1f} px")
+    ax.axvline(stats["mean_diameter_px"], color="red", linestyle="--",
+               linewidth=1.5, label=f"Mean={stats['mean_diameter_px']:.1f} px")
+    ax.axvline(stats["median_diameter_px"], color="orange", linestyle=":",
+               linewidth=1.5, label=f"Median={stats['median_diameter_px']:.1f} px")
 
-    # 3σ 阈值
-    threshold_3sigma = stats.mean_diameter_px + 3 * stats.std_diameter_px
+    threshold_3sigma = stats["mean_diameter_px"] + 3 * stats["std_diameter_px"]
     ax.axvline(threshold_3sigma, color="purple", linestyle="-.",
                linewidth=1.2, label=f"μ+3σ={threshold_3sigma:.1f} px")
 
     ax.set_xlabel("Equivalent Diameter (px)")
     ax.set_ylabel("Count")
-    ax.set_title(f"Grain Size Distribution  (n={stats.count})")
+    ax.set_title(f"Grain Size Distribution  (n={stats['count']})")
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
     _save(fig, output_path)
+
+
+def render_all_from_results(results_json_path: str, output_dir: Optional[str] = None) -> dict[str, str]:
+    """从结果 JSON 与 labels.npy 重建全部可视化文件。"""
+    results = io_utils.load_results_json(results_json_path)
+    labels_path = _resolve_artifact_path(results_json_path, results["artifacts"]["labels_path"])
+    image_path = _resolve_artifact_path(results_json_path, results["image_path"])
+
+    if not labels_path.exists():
+        raise FileNotFoundError(f"Labels artifact not found: {labels_path}")
+    if not image_path.exists():
+        raise FileNotFoundError(f"Image not found for rendering: {image_path}")
+
+    labels = np.load(labels_path)
+    image = io_utils.load_image(str(image_path))
+
+    out_dir = (
+        io_utils.make_output_dir(output_dir, results["image_name"])
+        if output_dir else Path(results_json_path).resolve().parent
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = io_utils.output_paths(out_dir, results["image_name"])
+
+    save_original(image, paths["original"])
+    save_segmented(image, labels, paths["segmented"])
+    render_area_method(image, labels, results, paths["area"])
+    render_intercept_method(image, labels, results, paths["intercept"])
+    render_anomaly(image, labels, results, paths["anomaly"])
+    render_distribution(results, paths["distribution"])
+    return paths
