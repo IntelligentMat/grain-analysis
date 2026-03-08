@@ -118,6 +118,12 @@ def load_results_json(results_json_path: str) -> dict[str, Any]:
         return json.load(f)
 
 
+def save_json(output_path: str, payload: dict[str, Any]) -> None:
+    """将字典写入 JSON 文件。"""
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(_to_serializable(payload), f, indent=2, ensure_ascii=False)
+
+
 def save_results_json(
     output_path: str,
     labels_path: str,
@@ -186,12 +192,16 @@ def save_results_json(
         "area_method": {
             "n_inside": area_result.n_inside,
             "n_intersect": area_result.n_intersect,
+            "n_edge": area_result.n_edge,
+            "n_corner": area_result.n_corner,
             "n_equivalent": area_result.n_equivalent,
             "n_a_per_mm2": round(area_result.n_a_per_mm2, 2),
             "astm_g_value": round(area_result.astm_g_value, 3),
             "mean_grain_area_mm2": area_result.mean_grain_area_mm2,
             "mean_diameter_um": round(area_result.mean_diameter_um, 3),
             "inside_grain_ids": area_result.inside_grain_ids,
+            "edge_grain_ids": area_result.edge_grain_ids,
+            "corner_grain_ids": area_result.corner_grain_ids,
             "intersect_grain_ids": area_result.intersect_grain_ids,
         },
         "intercept_method": {
@@ -203,8 +213,10 @@ def save_results_json(
             "mean_intercept_length_px": round(intercept_result.mean_intercept_length_px, 3),
             "mean_intercept_length_um": round(intercept_result.mean_intercept_length_um, 3),
             "astm_g_value": round(intercept_result.astm_g_value, 3),
+            "counting_basis": "grain_segments_n",
             "pattern_elements": intercept_result.pattern_elements,
             "intersection_points": intercept_result.intersection_points,
+            "half_intersection_points": intercept_result.half_intersection_points,
             "intersected_grain_ids": intercept_result.intersected_grain_ids,
         },
         "anomaly_detection": {
@@ -217,5 +229,4 @@ def save_results_json(
         },
     }
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(_to_serializable(result), f, indent=2, ensure_ascii=False)
+    save_json(output_path, result)

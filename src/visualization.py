@@ -136,10 +136,12 @@ def render_area_method(image: np.ndarray, labels: np.ndarray, results: dict, out
     rgb = _as_rgb(image)
     area_result = results["area_method"]
     inside_ids = area_result.get("inside_grain_ids", [])
-    intersect_ids = area_result.get("intersect_grain_ids", [])
+    edge_ids = area_result.get("edge_grain_ids", [])
+    corner_ids = area_result.get("corner_grain_ids", [])
 
     tinted = _tint_mask(rgb, labels, inside_ids, (0.18, 0.85, 0.35), alpha=0.35)
-    tinted = _tint_mask((tinted * 255).astype(np.uint8), labels, intersect_ids, (1.0, 0.6, 0.0), alpha=0.40)
+    tinted = _tint_mask((tinted * 255).astype(np.uint8), labels, edge_ids, (1.0, 0.6, 0.0), alpha=0.40)
+    tinted = _tint_mask((tinted * 255).astype(np.uint8), labels, corner_ids, (0.95, 0.3, 0.7), alpha=0.40)
     tinted = _overlay_boundaries(tinted, labels)
 
     h, w = labels.shape
@@ -152,10 +154,11 @@ def render_area_method(image: np.ndarray, labels: np.ndarray, results: dict, out
     ax.add_patch(rect)
 
     _annotate_grain_ids(ax, labels, inside_ids, text_color="#90ee90")
-    _annotate_grain_ids(ax, labels, intersect_ids, text_color="#ffd27f")
+    _annotate_grain_ids(ax, labels, edge_ids, text_color="#ffd27f")
+    _annotate_grain_ids(ax, labels, corner_ids, text_color="#ff9de1")
 
     info = (
-        f"N_inside={area_result['n_inside']}, N_intersect={area_result['n_intersect']}\n"
+        f"N_inside={area_result['n_inside']}, N_edge={area_result['n_edge']}, N_corner={area_result['n_corner']}\n"
         f"N_eq={area_result['n_equivalent']:.1f}, N_A={area_result['n_a_per_mm2']:.1f}/mm²\n"
         f"ASTM G = {area_result['astm_g_value']:.2f}"
     )
@@ -165,7 +168,8 @@ def render_area_method(image: np.ndarray, labels: np.ndarray, results: dict, out
 
     legend_handles = [
         mpatches.Patch(color=(0.18, 0.85, 0.35), label="Inside grains"),
-        mpatches.Patch(color=(1.0, 0.6, 0.0), label="Boundary-intersected grains"),
+        mpatches.Patch(color=(1.0, 0.6, 0.0), label="Edge grains (1/2)"),
+        mpatches.Patch(color=(0.95, 0.3, 0.7), label="Corner grains (1/4)"),
     ]
     ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.6)
     ax.set_title("Area Method (Planimetric / Jeffries)")
@@ -195,15 +199,23 @@ def render_intercept_method(image: np.ndarray, labels: np.ndarray, results: dict
                                      fill=False, edgecolor="cyan", linewidth=0.9, alpha=0.9)
             ax.add_patch(circle)
 
-    points = intercept_result.get("intersection_points", [])
+    half_points = intercept_result.get("half_intersection_points", [])
+    half_point_set = {tuple(point) for point in half_points}
+
+    points = [tuple(point) for point in intercept_result.get("intersection_points", [])
+              if tuple(point) not in half_point_set]
     if points:
         pts = np.array(points)
         ax.scatter(pts[:, 1], pts[:, 0], s=15, c="red", marker="o", zorder=5)
 
+    if half_points:
+        half_pts = np.array(half_points)
+        ax.scatter(half_pts[:, 1], half_pts[:, 0], s=38, c="#ff4d4f", marker="x", linewidths=1.3, zorder=6)
+
     _annotate_grain_ids(ax, labels, intersected_ids, text_color="#fff799")
 
     info = (
-        f"Intersections={intercept_result['total_intersections']}\n"
+        f"Intercepts={intercept_result['total_intersections']}\n"
         f"L_total={intercept_result['total_line_length_px']:.0f} px\n"
         f"l̄={intercept_result['mean_intercept_length_um']:.2f} μm\n"
         f"ASTM G = {intercept_result['astm_g_value']:.2f}"
@@ -215,7 +227,9 @@ def render_intercept_method(image: np.ndarray, labels: np.ndarray, results: dict
     legend_handles = [
         mpatches.Patch(color=(0.95, 0.92, 0.25), label="Intercepted grains"),
         mpatches.Patch(color="cyan", label="ASTM pattern"),
-        mpatches.Patch(color="red", label="Intersection points"),
+        mpatches.Patch(color="red", label="Intercept representatives"),
+        plt.Line2D([0], [0], color="#ff4d4f", marker="x", linestyle="None",
+                   markersize=7, markeredgewidth=1.3, label="0.5 intercepts"),
     ]
     ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.6)
     ax.set_title("Intercept Method — ASTM E112 (4 lines + 3 circles)")
