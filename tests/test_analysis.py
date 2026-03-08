@@ -16,7 +16,17 @@ from src.analysis import area_method, intercept_method
 
 
 class TestAreaMethod(unittest.TestCase):
+    """Validate ASTM area-method counting and derived metric outputs."""
+
     def test_area_method_applies_inside_edge_corner_weights(self):
+        """Check that interior, edge, and corner grains use the expected weights."""
+
+        # This synthetic label map contains:
+        # - grain 1 fully inside the field of view;
+        # - grains 2 and 4 touching one image edge;
+        # - grains 3 and 5 touching image corners.
+        # The test verifies both raw classification and the weighted equivalent
+        # grain count used by the ASTM area method.
         labels = np.array([
             [3, 2, 2, 2, 0],
             [4, 1, 1, 2, 0],
@@ -27,6 +37,7 @@ class TestAreaMethod(unittest.TestCase):
 
         result = area_method(labels, pixels_per_micron=2.0)
 
+        # Raw counting buckets should match the geometry above.
         self.assertEqual(result.n_inside, 1)
         self.assertEqual(result.n_intersect, 4)
         self.assertEqual(result.n_edge, 2)
@@ -35,6 +46,8 @@ class TestAreaMethod(unittest.TestCase):
         self.assertEqual(result.edge_grain_ids, [2, 4])
         self.assertEqual(result.corner_grain_ids, [3, 5])
         self.assertEqual(result.intersect_grain_ids, [2, 3, 4, 5])
+
+        # Derived ASTM metrics should be consistent with the weighted count.
         self.assertAlmostEqual(result.n_equivalent, 2.5)
         self.assertAlmostEqual(result.n_a_per_mm2, 400000.0)
         self.assertAlmostEqual(result.mean_grain_area_mm2, 2.5e-6)
@@ -42,13 +55,21 @@ class TestAreaMethod(unittest.TestCase):
         self.assertAlmostEqual(result.astm_g_value, 15.65604329119149)
 
     def test_area_method_rejects_non_positive_pixels_per_micron(self):
+        """Reject invalid calibration values before any grain statistics are computed."""
+
         labels = np.ones((3, 3), dtype=np.int32)
         with self.assertRaisesRegex(ValueError, 'pixels_per_micron'):
             area_method(labels, pixels_per_micron=0)
 
 
 class TestInterceptMethod(unittest.TestCase):
+    """Validate ASTM intercept-method counting and input validation."""
+
     def test_intercept_method_counts_grain_segments_n(self):
+        """Ensure the line/circle probe counts grain-segment intersections correctly."""
+
+        # Build three vertical grains of equal width so the probe pattern crosses
+        # repeated straight boundaries with predictable intersection totals.
         labels = np.zeros((20, 20), dtype=np.int32)
         labels[:, :7] = 1
         labels[:, 7:14] = 2
@@ -61,11 +82,14 @@ class TestInterceptMethod(unittest.TestCase):
             margin_ratio=0.05,
         )
 
+        # Probe pattern geometry should remain stable for this simple fixture.
         self.assertEqual(result.n_lines, 4)
         self.assertEqual(result.n_circles, 3)
         self.assertEqual(result.intersected_grain_ids, [1, 2, 3])
         self.assertEqual(len(result.pattern_elements), 7)
         self.assertEqual(len(result.intersection_points), 19)
+
+        # The computed intercept statistics should follow from those crossings.
         self.assertAlmostEqual(result.total_intersections, 16.0)
         self.assertAlmostEqual(result.n_l_per_px, 0.08761639411862952)
         self.assertAlmostEqual(result.mean_intercept_length_px, 11.413389127222413)
@@ -73,6 +97,8 @@ class TestInterceptMethod(unittest.TestCase):
         self.assertAlmostEqual(result.astm_g_value, 11.612394673330234)
 
     def test_intercept_method_rejects_non_positive_pixels_per_micron(self):
+        """Reject invalid spatial calibration for intercept calculations as well."""
+
         labels = np.ones((5, 5), dtype=np.int32)
         with self.assertRaisesRegex(ValueError, 'pixels_per_micron'):
             intercept_method(labels, pixels_per_micron=-1)

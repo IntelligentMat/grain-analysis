@@ -19,8 +19,7 @@ from typing import List, Dict, Any
 @dataclass
 class GrainProps:
     grain_id: int                 # 晶粒标签 ID（与 labels 中的整数标签一致）
-    area_px: float                # 晶粒像素数（regionprops.area）
-    area_px2: float               # 晶粒面积，单位 px^2（当前与 area_px 数值相同）
+    area_px2: float               # 晶粒面积，单位 px²
     perimeter_px: float           # 晶粒周长，单位 px
     equivalent_diameter_px: float # 等效圆直径，单位 px，公式 sqrt(4A/pi)
     aspect_ratio: float           # 长短轴比（major_axis/minor_axis）
@@ -114,7 +113,6 @@ def extract_grain_props(labels: np.ndarray) -> List[GrainProps]:
 
         props_list.append(GrainProps(
             grain_id=prop.label,
-            area_px=prop.area,
             area_px2=area_px2,
             perimeter_px=perim,
             equivalent_diameter_px=equiv_d_px,
@@ -237,30 +235,63 @@ def intercept_method(labels: np.ndarray,
                      min_intercept_px: int = 3,
                      margin_ratio: float = 0.05) -> InterceptMethodResult:
     """
-    Heyn 截距法 — ASTM E112 图样：4 条测试线 + 3 个同心圆。
+    Heyn 截距法 — 按 ASTM E112 标准图样估计平均截距长度与晶粒度等级。
 
-    测试线：底部水平、左侧垂直，以及两条对角线。
-    同心圆：圆心为图像中心，半径比例 0.7958 / 0.5305 / 0.2653 × min(H,W)/2，
-            来自 ASTM E112 附录，使三圆周长之和等于标准测量长度。
-    该实现按测试路径覆盖到的有效连续晶粒段数 N 统计截距，不直接统计晶界交点 P。
+    这段实现的核心思想，是把一组固定测试路径叠加到标签图上，
+    然后统计这些路径“穿过了多少个有效晶粒段”。
+
+    具体流程如下：
+    1. 在图像上布置 4 条开放测试线；
+    2. 在图像中心布置 3 个闭合同心圆；
+    3. 沿每条路径读取标签序列，例如 [0, 0, 3, 3, 1, 1, 1, 0]；
+    4. 将连续且长度足够的同标签区间视为一个有效晶粒段；
+    5. 汇总所有路径上的有效晶粒段数 N 与总路径长度 L；
+    6. 由 N/L 得到截距数密度 N_L，再反推平均截距长度和 ASTM G 值。
+
+    这里统计的是“有效晶粒段数 N”，不是直接数晶界交点 P：
+    - 对闭合路径（圆），每个有效晶粒段按 1.0 计数；
+    - 对开放路径（直线），如果某个有效段只接触路径一端，说明它可能是被
+      图像边界截断的端段，这类段按 0.5 计权，以减轻边界截断带来的偏差。
+
+    测试图样说明：
+    - 4 条测试线分别是：底部水平线、左侧垂直线、两条对角线；
+    - 3 个同心圆的圆心取图像中心；
+    - 圆半径比例 0.7958 / 0.5305 / 0.2653 × min(H, W) / 2，来自 ASTM E112
+      附录，目的是让三圆组合的周长与标准图样保持一致量级。
 
     Args:
-        labels:            晶粒标签图
-        pixels_per_micron: 像素/微米换算系数（如 2.25 px/μm）
-        min_intercept_px:  最小有效晶粒段像素数，过滤过短伪截距
-        margin_ratio:      测试线距图像边缘的留白比例（默认 5%）
+        labels: 晶粒标签图。0 表示背景，其余正整数表示不同晶粒。
+        pixels_per_micron: 像素/微米换算系数，用于把平均截距从像素换算到物理单位。
+        min_intercept_px: 最小有效晶粒段长度（像素）。短于该阈值的段会被忽略，
+            以降低噪声、锯齿边界和极短掠过段对统计结果的影响。
+        margin_ratio: 开放测试线距离图像边界的留白比例。设置边距可以避免测试线
+            贴着图像边缘走，从而减少大量边缘截断段。
 
     Returns:
-        InterceptMethodResult
+        InterceptMethodResult: 包含总截距数、总测试长度、平均截距、ASTM G 值，
+        以及用于后续可视化的图样元素和代表点。
     """
+    # 统一校验并归一化输入参数，避免出现非法物理尺度或小于 1 的段长阈值。
     pixels_per_micron = _validate_pixels_per_micron(pixels_per_micron)
     min_intercept_px = max(1, int(min_intercept_px))
+
+    # 基础几何量：
+    # - size 取图像短边，保证所有标准圆都能落在图像内部；
+    # - (r_c, c_c) 是同心圆圆心；
+    # - margin 控制开放测试线距离边界的留白。
     height, width = labels.shape
     size = min(height, width)          # 以较短边为基准（保证圆不超出图像）
     r_c = height // 2
     c_c = width // 2
     margin = max(1, int(margin_ratio * size))
 
+    # 下面逐条累加：
+    # - total_intersections: 有效晶粒段总数 N；
+    # - total_length_px: 全部测试路径总长度 L；
+    # - pattern_elements: 保存图样本身（线 / 圆），用于可视化叠加；
+    # - intersection_points: 每个有效晶粒段的代表点；
+    # - half_intersection_points: 开放路径中按 0.5 计权的端段代表点；
+    # - intersected_grain_ids: 所有被有效路径命中的晶粒 ID。
     total_intersections = 0
     total_length_px = 0.0
     pattern_elements: List[tuple] = []
@@ -268,7 +299,9 @@ def intercept_method(labels: np.ndarray,
     half_intersection_points: List[tuple] = []
     intersected_grain_ids: set[int] = set()
 
-    # ── 4 条测试线 ────────────────────────────────────────────────────
+    # ── 4 条开放测试线 ─────────────────────────────────────────────────
+    # 每个元组是 (r1, c1, r2, c2)。
+    # 开放路径有明确起点和终点，所以末端被截断的晶粒段可能按 0.5 计权。
     line_defs = [
         (height - 1 - margin, margin,   height - 1 - margin, width - 1 - margin),  # 水平（底部）
         (margin,              margin,   height - 1 - margin,  margin),              # 垂直（左侧）
@@ -276,29 +309,42 @@ def intercept_method(labels: np.ndarray,
         (height - 1 - margin, margin, margin,           width - 1 - margin),        # 对角 ↗
     ]
     for r1, c1, r2, c2 in line_defs:
+        # 先把连续几何直线离散成像素路径，并裁掉理论上可能越界的点。
         rr, cc = skdraw.line(r1, c1, r2, c2)
         mask = (rr >= 0) & (rr < height) & (cc >= 0) & (cc < width)
         rr, cc = rr[mask], cc[mask]
+
+        # 沿路径读取标签，得到一维标签序列；后续辅助函数会把它拆成连续晶粒段。
         line_labels = labels[rr, cc]
         intersected_grain_ids.update(
             _intercepted_grain_ids_on_path(line_labels, min_intercept_px, is_closed=False)
         )
 
+        # _count_intercepts: 把连续晶粒段转成计权后的 N；
+        # _intercept_positions_on_path: 给每个有效段选一个代表点；
+        # _half_intercept_positions_on_path: 单独记录按 0.5 计权的端段位置。
         total_intersections += _count_intercepts(line_labels, min_intercept_px,
                                                  is_closed=False)
         intersection_points += _intercept_positions_on_path(
             line_labels, rr, cc, min_intercept_px, is_closed=False)
         half_intersection_points += _half_intercept_positions_on_path(
             line_labels, rr, cc, min_intercept_px, is_closed=False)
+
+        # 长度使用两端点欧氏距离，而不是简单的像素个数，
+        # 这样对角线与水平/垂直线的长度具有一致的连续几何意义。
         total_length_px += float(np.sqrt((r2 - r1) ** 2 + (c2 - c1) ** 2))
         pattern_elements.append(('line', r1, c1, r2, c2))
 
-    # ── 3 个同心圆（ASTM E112 标准半径比例）─────────────────────────
+    # ── 3 个闭合同心圆（ASTM E112 标准半径比例）─────────────────────────
+    # 圆是闭合路径，没有“起点/终点截断”的概念，因此有效晶粒段统一按 1.0 计数。
     astm_radii_ratios = [0.7958, 0.5305, 0.2653]
     for ratio in astm_radii_ratios:
         radius = int(round(ratio * size / 2))
         if radius <= 0:
             continue
+
+        # 生成离散圆周像素后，必须按极角排序，保证沿圆周遍历时标签序列连续；
+        # 否则像素顺序被打乱会导致同一个晶粒被错误拆成多个段。
         rr, cc = skdraw.circle_perimeter(r_c, c_c, radius, shape=labels.shape)
         rr, cc = _sort_circle_pixels(rr, cc, r_c, c_c)
         circ_labels = labels[rr, cc]
@@ -310,10 +356,15 @@ def intercept_method(labels: np.ndarray,
                                                  is_closed=True)
         intersection_points += _intercept_positions_on_path(
             circ_labels, rr, cc, min_intercept_px, is_closed=True)
+
+        # 闭合圆路径长度直接使用连续几何圆周长 2πr。
         total_length_px += 2.0 * np.pi * radius
         pattern_elements.append(('circle', r_c, c_c, radius))
 
-    # ── 计算 N_L、平均截距、G 值 ──────────────────────────────────────
+    # ── 从 N 和 L 推导 ASTM 结果 ───────────────────────────────────────
+    # N_L = N / L：单位长度上的截距数密度；
+    # 平均截距长度 l_bar = 1 / N_L；
+    # 再用像素/微米系数换算到 μm 和 mm，最后代入 ASTM E112 经验公式计算 G 值。
     n_l_per_px = total_intersections / total_length_px if total_length_px > 0 else 0.0
     mean_intercept_px = 1.0 / n_l_per_px if n_l_per_px > 0 else 0.0
     mean_intercept_um = mean_intercept_px / pixels_per_micron
@@ -338,27 +389,41 @@ def intercept_method(labels: np.ndarray,
 
 
 def _get_grain_segments(line_labels: np.ndarray) -> list:
-    """从标签序列中提取连续晶粒段。
+    """从一维标签序列中提取连续晶粒段。
 
-    返回 [(start_px, end_px, grain_id), ...] 列表，end_px 为不含端点索引。
-    背景像素（label=0）作为晶界分隔符，相邻不同非零标签直接视为段切换。
+    输入通常来自某条测试路径沿途采样到的标签值，例如：
+    [0, 0, 3, 3, 3, 1, 1, 0, 4, 4]
+
+    这会被拆成：
+    - (2, 5, 3)：标签 3 占据索引 [2, 5)
+    - (5, 7, 1)：标签 1 占据索引 [5, 7)
+    - (8, 10, 4)：标签 4 占据索引 [8, 10)
+
+    规则是：
+    - 背景 0 视为分隔符，不构成晶粒段；
+    - 相邻不同的非零标签视为段切换；
+    - 返回的 end_px 采用右开区间，便于后续直接用 end-start 算段长。
     """
     segments = []
     prev = 0
     seg_start = 0
     for i, lbl in enumerate(line_labels):
         if lbl == 0:
+            # 遇到背景，说明前一个非零连续段到这里结束。
             if prev != 0:
                 segments.append((seg_start, i, int(prev)))
             prev = 0
         else:
             if prev == 0:
+                # 从背景进入非背景，开启一个新的晶粒段。
                 seg_start = i
             elif lbl != prev:
+                # 非零标签发生变化，说明前一个晶粒段结束、当前晶粒段开始。
                 segments.append((seg_start, i, int(prev)))
                 seg_start = i
             prev = lbl
     if prev != 0:
+        # 序列结尾仍在某个晶粒内部时，补上最后一个段。
         segments.append((seg_start, len(line_labels), int(prev)))
     return segments
 
@@ -366,7 +431,15 @@ def _get_grain_segments(line_labels: np.ndarray) -> list:
 def _valid_grain_segment_groups(line_labels: np.ndarray,
                                 min_intercept_px: int = 3,
                                 is_closed: bool = False) -> list[list[tuple[int, int, int]]]:
-    """返回有效晶粒段分组；闭合路径会合并首尾同晶粒段。"""
+    """返回参与截距统计的有效晶粒段分组。
+
+    先用 `_get_grain_segments` 找到所有连续非零晶粒段，再做两步处理：
+    1. 过滤掉长度小于 `min_intercept_px` 的短段；
+    2. 若路径是闭合的（圆周），并且首尾分组属于同一晶粒，则把它们合并。
+
+    合并首尾的原因是：闭合路径没有真正的“开头”和“结尾”，
+    因此圆周序列在数组首尾被切开的同一晶粒，本质上应算作一个截段。
+    """
     segs = _get_grain_segments(line_labels)
     groups: list[list[tuple[int, int, int]]] = [
         [seg] for seg in segs if (seg[1] - seg[0]) >= min_intercept_px
@@ -379,7 +452,16 @@ def _valid_grain_segment_groups(line_labels: np.ndarray,
 def _count_intercepts(line_labels: np.ndarray,
                       min_intercept_px: int = 3,
                       is_closed: bool = False) -> float:
-    """统计测试路径覆盖到的有效连续晶粒段数 N。"""
+    """把有效晶粒段分组转换成截距计数 N。
+
+    计数规则：
+    - 闭合路径：每个有效分组记 1.0；
+    - 开放路径：
+      - 若某分组只接触路径起点或终点中的一端，记 0.5；
+      - 其余情况记 1.0。
+
+    这样做是为了在直线路径上近似处理“端部截断晶粒”的情况。
+    """
     groups = _valid_grain_segment_groups(line_labels, min_intercept_px, is_closed=is_closed)
     path_len = len(line_labels)
     total = 0.0
@@ -400,14 +482,24 @@ def _count_intercepts(line_labels: np.ndarray,
 def _intercepted_grain_ids_on_path(line_labels: np.ndarray,
                                    min_intercept_px: int = 3,
                                    is_closed: bool = False) -> set[int]:
-    """返回在该路径上形成有效晶粒段的晶粒 ID。"""
+    """返回某条路径上真正参与统计的晶粒 ID。
+
+    这里不会返回所有“碰到过”的标签，而只返回形成了有效晶粒段的标签，
+    也就是通过最小段长筛选、并完成首尾合并后的那些晶粒。
+    """
     groups = _valid_grain_segment_groups(line_labels, min_intercept_px, is_closed=is_closed)
     return {int(seg[2]) for group in groups for seg in group}
 
 
 def _sort_circle_pixels(rr: np.ndarray, cc: np.ndarray,
                         r_center: int, c_center: int):
-    """按角度排序圆周像素，保证沿圆周遍历的连续性。"""
+    """按极角对圆周像素排序，恢复沿圆周行走的顺序。
+
+    `circle_perimeter` 返回的是一组圆周像素，但它们的顺序不一定对应
+    连续的环形遍历顺序。若直接取标签，会把同一圆周上的连续晶粒段打乱。
+    因此这里用相对圆心的极角排序，确保后续得到的标签序列是“沿圆周一圈”
+    的顺序。
+    """
     angles = np.arctan2(rr - r_center, cc - c_center)
     order = np.argsort(angles)
     return rr[order], cc[order]
@@ -418,7 +510,17 @@ def _intercept_positions_on_path(path_labels: np.ndarray,
                                  path_c: np.ndarray,
                                  min_intercept_px: int = 3,
                                  is_closed: bool = False) -> List[tuple]:
-    """返回任意路径上有效晶粒段的代表点 (row, col) 坐标。"""
+    """为每个有效晶粒段选择一个代表点坐标。
+
+    这些点主要用于可视化：在图上标出“这里存在一个被计入统计的截段”。
+
+    选点策略：
+    - 对普通分组，取该分组中最长晶粒段的中点；
+    - 对开放路径上仅接触起点的端段，取路径起点；
+    - 对开放路径上仅接触终点的端段，取路径终点。
+
+    这样做可以让按 0.5 计权的端段在图上也表现出“它是一个边界端段”。
+    """
     groups = _valid_grain_segment_groups(path_labels, min_intercept_px, is_closed=is_closed)
     path_len = len(path_labels)
     points: List[tuple] = []
@@ -443,7 +545,12 @@ def _half_intercept_positions_on_path(path_labels: np.ndarray,
                                       path_c: np.ndarray,
                                       min_intercept_px: int = 3,
                                       is_closed: bool = False) -> List[tuple]:
-    """返回开放路径上按 0.5 计权的端段代表点 (row, col)。"""
+    """返回开放路径上按 0.5 计权的端段代表点。
+
+    这个函数是 `_intercept_positions_on_path` 的补充：
+    它只提取那些“碰到路径起点或终点且只碰到一端”的分组，
+    方便在可视化中单独高亮半权重截段。
+    """
     if is_closed:
         return []
 
