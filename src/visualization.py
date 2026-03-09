@@ -22,6 +22,7 @@ from matplotlib.figure import Figure
 from skimage.color import label2rgb
 from skimage.measure import regionprops
 from skimage.segmentation import find_boundaries
+from matplotlib.lines import Line2D
 
 from src import io_utils
 
@@ -168,11 +169,11 @@ def render_area_method(image: np.ndarray, labels: np.ndarray, results: dict, out
 
     legend_handles = [
         mpatches.Patch(color=(0.18, 0.85, 0.35), label="Inside grains"),
-        mpatches.Patch(color=(1.0, 0.6, 0.0), label="Edge grains (1/2)"),
-        mpatches.Patch(color=(0.95, 0.3, 0.7), label="Corner grains (1/4)"),
+        mpatches.Patch(color=(1.0, 0.6, 0.0), label="Edge grains (non-corner, 1/2)"),
+        mpatches.Patch(color=(0.95, 0.3, 0.7), label="Corner grains (adjacent borders, 1/4)"),
     ]
     ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.6)
-    ax.set_title("Area Method (Planimetric / Jeffries)")
+    ax.set_title("Area Method (Planimetric / Jeffries, adjacent-border corners)")
     ax.axis("off")
     _save(fig, output_path)
 
@@ -228,7 +229,7 @@ def render_intercept_method(image: np.ndarray, labels: np.ndarray, results: dict
         mpatches.Patch(color=(0.95, 0.92, 0.25), label="Intercepted grains"),
         mpatches.Patch(color="cyan", label="ASTM pattern"),
         mpatches.Patch(color="red", label="Intercept representatives"),
-        plt.Line2D([0], [0], color="#ff4d4f", marker="x", linestyle="None",
+        Line2D([0], [0], color="#ff4d4f", marker="x", linestyle="None",
                    markersize=7, markeredgewidth=1.3, label="0.5 intercepts"),
     ]
     ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.6)
