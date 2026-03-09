@@ -130,12 +130,15 @@ def save_results_json(
     image_name: str,
     image_path: str,
     image_shape: tuple[int, ...],
+    segmentation_method: str,
     segmentation_params: dict,
     total_grains: int,
     stats: GrainStatistics,
     area_result: AreaMethodResult,
     intercept_result: InterceptMethodResult,
     anomaly_result: AnomalyResult,
+    extra_artifacts: dict[str, Any] | None = None,
+    segmentation_details: dict[str, Any] | None = None,
 ) -> None:
     """将分析结果写入 JSON 文件。"""
 
@@ -170,11 +173,13 @@ def save_results_json(
         },
         "artifacts": {
             "labels_path": labels_path,
+            **(extra_artifacts or {}),
         },
         "segmentation": {
-            "method": "watershed",
+            "method": segmentation_method,
             "total_grains": total_grains,
             "params": segmentation_params,
+            "details": segmentation_details or {},
         },
         "grain_statistics": {
             "count": stats.count,

@@ -1,5 +1,6 @@
 name: grain-analysis
 channels:
+  - pytorch
   - conda-forge
   - defaults
 dependencies:
@@ -12,7 +13,17 @@ dependencies:
   - pillow
   - click
   - tqdm
+  - libjpeg-turbo
+  - libpng
+  - jpeg
+  - pandas
+  - pytorch
+  - pyright
+  - torchvision
   - pip
   - pip:
       - imageio
       - medpy
+      - transformers>=4.57.0
+      - accelerate
+      - safetensors

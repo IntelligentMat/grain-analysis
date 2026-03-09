@@ -1,6 +1,6 @@
 # Grain Size Analysis System
 
-基于传统图像处理的金相图晶粒自动分割与尺寸分析系统，符合 ASTM E112-13 标准。
+基于传统图像处理与 SAM3 零样本原型的金相图晶粒自动分割与尺寸分析系统，符合 ASTM E112-13 标准。
 
 ## 功能
 
@@ -102,6 +102,7 @@ python main.py [OPTIONS]
 | `--opening-disk INT` | `1` | 形态学开运算核半径，消除细线/划痕（增大至 2~4 可增强去划痕效果） |
 | `--min-grain-area INT` | 自动 | 最小晶粒面积（像素²） |
 | `--remove-border` | 否 | 移除接触图像边缘的晶粒 |
+| `--segmentation-backend` | `watershed` | 分割后端：`watershed` / `sam3` |
 
 ### 物理单位参数
 
@@ -236,7 +237,19 @@ grain-analysis/
     ├── anomaly.py       # 三规则异常晶粒判定
     ├── visualization.py # 标注图生成（matplotlib）
     ├── io_utils.py      # 图像读取、目录管理、JSON 存储
-    └── pipeline.py      # 端到端流程编排
+    ├── sam3_prompting.py    # SAM3 文本/box 提示构建与 fallback 判定
+    ├── sam3_postprocess.py  # SAM3 候选过滤、NMS、标签图生成
+    ├── sam3_backend.py      # SAM3 本地模型加载与零样本推理后端
+    └── pipeline.py          # 端到端流程编排（支持 watershed / sam3）
+├── scripts/
+│   ├── check_sam3_env.py
+│   ├── run_sam3_zero_shot.py
+│   ├── export_sam3_labels.py
+│   └── evaluate_sam3_vs_classical.py
+├── envs/
+│   └── sam3.yml
+└── docs/
+    └── sam3_zero_shot_review.md
 ```
 
 ---
