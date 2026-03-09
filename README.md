@@ -58,7 +58,7 @@ python main.py \
 说明：
 - `sam3` 后端会优先复用 `data/{image_name}/optical/{image_name}_labels.npy`
 - 如果 optical 结果不存在，会先自动跑一遍 `optical`
-- 然后从 optical 的 `labels.npy` 中按面积选前 `30%` 晶粒，生成 box prompts，再调用 SAM3 推理
+- 然后从 optical 的 `labels.npy` 中按面积选前 `5%` 晶粒，生成 box prompts，再调用 SAM3 推理
 
 ### 3) 整个文件夹（批量）
 
@@ -222,7 +222,7 @@ python main.py [OPTIONS]
 | `--sam3-mask-threshold` | `0.5` | SAM3 二值 mask 阈值 |
 | `--sam3-opening-disk` | `1` | 对每个 SAM3 mask 做开运算的核半径 |
 | `--sam3-closing-disk` | `2` | 对每个 SAM3 mask 做闭运算的核半径 |
-| `--sam3-prompt-top-ratio` | `0.3` | 从 optical labels 中按面积选前多少比例晶粒做 prompts |
+| `--sam3-prompt-top-ratio` | `0.05` | 从 optical labels 中按面积选前多少比例晶粒做 prompts |
 
 ---
 
@@ -321,7 +321,7 @@ data/{image_name}/
     "method": "sam3_prompt_boxes",
     "details": {
       "prompt_source_labels_path": ".../optical/RG1_1_1_labels.npy",
-      "prompt_top_ratio": 0.3,
+      "prompt_top_ratio": 0.05,
       "prompt_selected_grain_ids": [1, 4, 7],
       "prompt_selected_grain_count": 3,
       "prompt_mode": "boxes_from_optical_top_area",
