@@ -4,7 +4,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.13
+  - python=3.11
   - numpy
   - scipy
   - scikit-image
@@ -17,9 +17,11 @@ dependencies:
   - libpng
   - jpeg
   - pandas
+  - requests
+  - protobuf
   - pytorch
-  - pyright
   - torchvision
+  - pyright
   - pip
   - pip:
       - imageio

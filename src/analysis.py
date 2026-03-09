@@ -48,8 +48,8 @@ class GrainStatistics:
 class AreaMethodResult:
     n_inside: int                 # 完全落在测量区域内部的晶粒数
     n_intersect: int              # 与测量区域边界接触的晶粒总数（edge + corner）
-    n_edge: int                   # 接触边界但不含角点的晶粒数（权重 1/2）
-    n_corner: int                 # 包含任一角点像素的晶粒数（权重 1/4）
+    n_edge: int                   # 接触边界但不属于角部晶粒的晶粒数（权重 1/2）
+    n_corner: int                 # 同时接触两条相邻边的角部晶粒数（权重 1/4）
     n_equivalent: float           # 等效晶粒数 N_eq = N_inside + 0.5*N_edge + 0.25*N_corner
     n_a_per_mm2: float            # 面密度 N_A（grains/mm²）
     astm_g_value: float           # ASTM E112 对应的 G 值
@@ -157,8 +157,8 @@ def area_method(labels: np.ndarray,
     Jeffries 平面测定法（ASTM E112 面积法）。
 
     测量区域默认为全图矩形。完全在内部的晶粒计 1；
-    接触边界但不含角点的晶粒计 1/2；
-    包含任一角点像素的晶粒计 1/4。
+    接触边界但不属于角部晶粒的计 1/2；
+    同时接触两条相邻边的角部晶粒计 1/4。
 
     Args:
         labels: 晶粒标签图
@@ -173,19 +173,21 @@ def area_method(labels: np.ndarray,
     # 测量区域：全图矩形（按像素）
     area_px = height * width
 
-    # 边界像素（接触图像 4 条边的晶粒 ID）
-    border_ids: set[int] = set()
-    border_ids.update(int(v) for v in np.unique(labels[0, :]) if v != 0)
-    border_ids.update(int(v) for v in np.unique(labels[-1, :]) if v != 0)
-    border_ids.update(int(v) for v in np.unique(labels[:, 0]) if v != 0)
-    border_ids.update(int(v) for v in np.unique(labels[:, -1]) if v != 0)
+    # 接触图像 4 条边的晶粒 ID
+    top_ids = {int(v) for v in np.unique(labels[0, :]) if v != 0}
+    bottom_ids = {int(v) for v in np.unique(labels[-1, :]) if v != 0}
+    left_ids = {int(v) for v in np.unique(labels[:, 0]) if v != 0}
+    right_ids = {int(v) for v in np.unique(labels[:, -1]) if v != 0}
 
-    corner_ids = {
-        int(labels[0, 0]),
-        int(labels[0, -1]),
-        int(labels[-1, 0]),
-        int(labels[-1, -1]),
-    } - {0}
+    border_ids = top_ids | bottom_ids | left_ids | right_ids
+
+    # corner 定义为同时接触两条相邻边，而不是必须覆盖图像角点像素
+    corner_ids = (
+        (top_ids & left_ids)
+        | (top_ids & right_ids)
+        | (bottom_ids & left_ids)
+        | (bottom_ids & right_ids)
+    )
 
     all_ids = {int(v) for v in np.unique(labels) if v != 0}
 

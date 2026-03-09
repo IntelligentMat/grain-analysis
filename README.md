@@ -1,14 +1,16 @@
 # Grain Size Analysis System
 
-基于传统图像处理与 SAM3 零样本原型的金相图晶粒自动分割与尺寸分析系统，符合 ASTM E112-13 标准。
+基于传统光学图像处理与 SAM3 prompt-based 后端的金相图晶粒自动分割与尺寸分析系统，支持 ASTM E112-13 面积法、截线法和异常晶粒检测。
 
 ## 功能
 
-- 自动晶粒分割（Otsu 阈值 + Watershed 分水岭）
-- 面积法（Planimetric/Jeffries）ASTM G 值计算（N_A 单位 mm⁻²，结果符合 ASTM E112）
-- 截线法（Heyn Intercept）ASTM E112 标准测试图案（4 条线 + 3 个同心圆）
+- `optical` 后端：Otsu 阈值 + 形态学 + Watershed 分水岭晶粒分割
+- `sam3` 后端：基于 `optical` 结果自动构建 prompts，并调用 SAM3 做 prompt-based 实例分割
+- 面积法（Planimetric / Jeffries）ASTM G 值计算
+- 截线法（Heyn Intercept）ASTM G 值计算
 - 异常晶粒识别（尺寸比法 / 长尾分布法 / 3σ 准则）
 - 可视化标注图输出（分割图、分析图、异常图、分布直方图）
+- `results.json` + `labels.npy` 工件保存与重绘
 
 ---
 
@@ -19,90 +21,176 @@ micromamba env create -f environment.yml
 micromamba activate grain-analysis
 ```
 
-依赖包含 `medpy`（各向异性扩散）、`scikit-image`、`opencv`、`matplotlib`。
+依赖包含：`numpy`、`scikit-image`、`opencv`、`matplotlib`、`pytorch`、`transformers`、`medpy`。
+
+如果要运行 SAM3，还需要：
+- 本机可用的 `torch` 运行环境（`cpu/cuda/mps` 之一）
+- 对 `facebook/sam3` 的访问权限
+- 已完成 Hugging Face 登录（若模型访问受限）
 
 ---
 
 ## 快速运行
 
-### 单张图像
+### 1) 单张图像：传统 optical 后端
 
 ```bash
 python main.py \
   --input /Users/siyuliu/Desktop/OM/steel_grain_size_dataset/RG/RG36_2_1.jpg \
+  --segmentation-backend optical \
   --pixels-per-micron 2.25
 ```
 
-输出写入 `./data/RG36_2_1/`。
+输出写入：`./data/RG36_2_1/optical/`
 
-### 整个文件夹（批量）
+### 2) 单张图像：SAM3 后端
+
+```bash
+python main.py \
+  --input /Users/siyuliu/Desktop/OM/steel_grain_size_dataset/RG/RG36_2_1.jpg \
+  --segmentation-backend sam3 \
+  --pixels-per-micron 2.25 \
+  --sam3-device cpu
+```
+
+输出写入：`./data/RG36_2_1/sam3/`
+
+说明：
+- `sam3` 后端会优先复用 `data/{image_name}/optical/{image_name}_labels.npy`
+- 如果 optical 结果不存在，会先自动跑一遍 `optical`
+- 然后从 optical 的 `labels.npy` 中按面积选前 `30%` 晶粒，生成 box prompts，再调用 SAM3 推理
+
+### 3) 整个文件夹（批量）
 
 ```bash
 python main.py \
   --input /Users/siyuliu/Desktop/OM/steel_grain_size_dataset/RG/ \
+  --segmentation-backend optical \
   --pixels-per-micron 2.25 \
   --output ./data
 ```
 
-### 根据结果工件重绘
+或：
 
 ```bash
 python main.py \
-  --render-from-results ./data/RG36_2_1/RG36_2_1_results.json \
+  --input /Users/siyuliu/Desktop/OM/steel_grain_size_dataset/RG/ \
+  --segmentation-backend sam3 \
+  --pixels-per-micron 2.25 \
   --output ./data
 ```
 
-### 使用双边滤波抑制划痕
+### 4) 根据结果工件重绘
+
+```bash
+python main.py \
+  --render-from-results ./data/RG36_2_1/optical/RG36_2_1_results.json
+```
+
+或：
+
+```bash
+python main.py \
+  --render-from-results ./data/RG36_2_1/sam3/RG36_2_1_results.json
+```
+
+如果显式传入 `--output`，重绘结果会落到：`{output}/{image_name}/{backend}/`
+
+### 5) 使用双边滤波抑制划痕
 
 ```bash
 python main.py \
   --input /path/to/image.jpg \
+  --segmentation-backend optical \
   --pixels-per-micron 2.25 \
   --smooth-mode bilateral
 ```
 
 ---
 
+## SAM3 相关工具
+
+### SAM3 交互式 GUI
+
+```bash
+python scripts/sam3_interactive_gui.py \
+  --image steel_grain_size_dataset/RG/RG36_2_1.jpg \
+  --model-id facebook/sam3
+```
+
+GUI 支持：
+- 文本 prompt
+- 正负样本框
+- `Auto Segment All`
+- 叠加预览
+- 导出 PNG / JSON / `*_masks.npy`
+
+### 从 optical labels 导出 prompts
+
+```bash
+python scripts/labels_to_sam3_prompts.py \
+  --labels data/RG1_1_1/optical/RG1_1_1_labels.npy \
+  --top-ratio 0.3 \
+  --mode both
+```
+
+输出为：
+- `*_sam3_prompts.json`
+- `*_sam3_prompts_masks.npz`（若 `mode` 为 `masks` 或 `both`）
+
+### 直接分析 GUI 导出的 `*_masks.npy`
+
+```bash
+python scripts/analyze_sam3_masks.py \
+  --masks data/rg1_1_1_sam3_masks.npy \
+  --json data/rg1_1_1_sam3.json \
+  --pixels-per-micron 2.25 \
+  --output ./data
+```
+
+该脚本现在会对每个 SAM3 mask 做一次：
+- 开运算（opening）
+- 闭运算（closing）
+
+再转成项目内部的 `labels.npy` 和标准分析结果。
+
+---
+
 ## CLI 参数说明
 
-```
+```bash
 python main.py [OPTIONS]
 ```
 
-### 必填参数
-
-| 参数 | 缩写 | 说明 |
-|---|---|---|
-| `--input PATH` | `-i` | 输入图像文件或文件夹路径 |
-| `--render-from-results PATH` |  | 根据已有 `results.json` 重绘可视化 |
-
-### 通用参数
-
-| 参数 | 缩写 | 默认值 | 说明 |
-|---|---|---|---|
-| `--output DIR` | `-o` | `./data` | 输出根目录 |
-
-### 预处理参数
+### 输入 / 输出
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--smooth-mode` | `gaussian` | 平滑模式：`gaussian` / `bilateral`（双边滤波）/ `anisotropic`（各向异性扩散） |
-| `--gaussian-sigma FLOAT` | 自动估计 | 高斯滤波标准差（仅 `smooth-mode=gaussian` 时有效） |
-| `--median-kernel INT` | `3` | 中值滤波核大小（奇数），去椒盐噪声 |
-| `--clahe-clip FLOAT` | `2.0` | CLAHE 对比度限制，增强晶界可见性 |
+| `--input PATH` | — | 输入图像文件或文件夹路径 |
+| `--render-from-results PATH` | — | 根据已有 `results.json` 重绘可视化 |
+| `--output DIR` | `./data` | 输出根目录；重绘时不传则写回原结果目录 |
 
-> `bilateral`：平滑晶粒内部划痕，同时保留晶界边缘；`anisotropic`：Perona-Malik 扩散，效果更强但速度较慢。
+### 预处理参数（主要作用于 `optical`）
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--smooth-mode` | `gaussian` | 平滑模式：`gaussian` / `bilateral` / `anisotropic` |
+| `--gaussian-sigma FLOAT` | 自动估计 | 高斯滤波标准差 |
+| `--median-kernel INT` | `3` | 中值滤波核大小（奇数） |
+| `--clahe-clip FLOAT` | `2.0` | CLAHE 对比度限制 |
+
+> `bilateral` 更适合抑制晶粒内部划痕；`anisotropic` 去噪更强但速度较慢。
 
 ### 分割参数
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--min-distance INT` | 自动（图像短边 × 5%）| Watershed marker 最小间距（像素） |
-| `--closing-disk INT` | `2` | 形态学闭运算核半径，填补断裂晶界 |
-| `--opening-disk INT` | `1` | 形态学开运算核半径，消除细线/划痕（增大至 2~4 可增强去划痕效果） |
-| `--min-grain-area INT` | 自动 | 最小晶粒面积（像素²） |
-| `--remove-border` | 否 | 移除接触图像边缘的晶粒 |
-| `--segmentation-backend` | `watershed` | 分割后端：`watershed` / `sam3` |
+| `--segmentation-backend` | `optical` | 后端：`optical` / `sam3` |
+| `--min-distance INT` | 自动 | Watershed marker 最小间距（仅 `optical`） |
+| `--closing-disk INT` | `2` | `optical` 形态学闭运算核半径 |
+| `--opening-disk INT` | `1` | `optical` 形态学开运算核半径 |
+| `--min-grain-area INT` | 自动 | `optical` 最小晶粒面积 |
+| `--remove-border` | 否 | 是否移除接触图像边缘的晶粒（仅 `optical`） |
 
 ### 物理单位参数
 
@@ -114,110 +202,141 @@ python main.py [OPTIONS]
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--min-intercept-px INT` | `3` | 最小有效截段长度（px），过滤仅擦过晶粒角点的虚假截交 |
+| `--min-intercept-px INT` | `3` | 最小有效截段长度（px） |
 
 ### 异常检测参数
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--rule-a-threshold FLOAT` | `3.0` | 规则 A：d_max/d_avg 超过此值判定为异常 |
-| `--rule-b-top-pct FLOAT` | `5.0` | 规则 B：检测前 X% 大晶粒的面积占比 |
-| `--rule-b-area-frac FLOAT` | `0.30` | 规则 B：前 X% 晶粒面积占比超过此值判定为异常 |
+| `--rule-a-threshold FLOAT` | `3.0` | 规则 A：`d_max / d_avg` 阈值 |
+| `--rule-b-top-pct FLOAT` | `5.0` | 规则 B：检测前 X% 大晶粒 |
+| `--rule-b-area-frac FLOAT` | `0.30` | 规则 B：面积占比阈值 |
+
+### SAM3 参数
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--sam3-model-id` | `facebook/sam3` | Hugging Face SAM3 模型 ID |
+| `--sam3-device` | `auto` | 运行设备：`auto` / `cpu` / `cuda` / `mps` |
+| `--sam3-score-threshold` | `0.5` | SAM3 实例分割分数阈值 |
+| `--sam3-mask-threshold` | `0.5` | SAM3 二值 mask 阈值 |
+| `--sam3-opening-disk` | `1` | 对每个 SAM3 mask 做开运算的核半径 |
+| `--sam3-closing-disk` | `2` | 对每个 SAM3 mask 做闭运算的核半径 |
+| `--sam3-prompt-top-ratio` | `0.3` | 从 optical labels 中按面积选前多少比例晶粒做 prompts |
 
 ---
 
 ## 算法说明
 
-### 预处理
+### Optical 后端
 
-```
-彩色图像 → 灰度化 → 平滑去噪（gaussian / bilateral / anisotropic）→ 中值滤波 → CLAHE
+```text
+彩色图像
+→ 灰度化
+→ 平滑去噪（gaussian / bilateral / anisotropic）
+→ 中值滤波
+→ CLAHE
+→ Otsu 阈值
+→ 形态学闭/开运算
+→ 距离变换
+→ peak_local_max
+→ Watershed
 ```
 
-### 晶粒分割
+### SAM3 后端
 
+```text
+输入图像
+→ 读取 / 自动生成 optical labels
+→ 按面积降序选取前 ceil(30%) 晶粒
+→ 构建 box prompts
+→ SAM3 prompt-based instance segmentation
+→ 对每个返回 mask 做 opening + closing
+→ 合成为最终 labels
+→ 进入统一 analysis / anomaly / visualization 流程
 ```
-预处理图 → Otsu 阈值 → 形态学闭/开运算 → 距离变换 → peak_local_max → Watershed
-```
-
-`min_distance` 控制 marker 最小间距，默认为图像短边的 5%（400×300 图约 15 px）。
 
 ### 面积法（ASTM E112 Jeffries Planimetric）
 
-```
-N_eq = N_inside + 0.5 × N_intersect
-N_A  = N_eq / A_mm²            （单位：grains/mm²）
-G    = 3.322 × log₁₀(N_A) − 2.954
-```
+当前实现中：
 
-### 截线法（ASTM E112 Heyn Intercept — 标准图案）
-
-测试图案：**4 条线 + 3 个同心圆**（符合 ASTM E112 附录 A 标准）
-
-- 水平线：图像底部（距边缘 5% margin）
-- 垂直线：图像左侧（距边缘 5% margin）
-- 对角线 ↘ / ↗：margin 内缩
-- 同心圆：圆心居中，半径比例 0.7958 / 0.5305 / 0.2653 × min(H,W)/2
-
-```
-l̄ = L_total / P          （P = 总交点数，L_total = 测试路径总长）
-G = −6.6457 × log₁₀(l̄_mm) − 3.298
+```text
+N_eq = N_inside + 0.5 × N_edge + 0.25 × N_corner
+N_A  = N_eq / A_mm²
+G    = 3.322 × log10(N_A) − 2.954
 ```
 
-交点计数过滤掉长度 < `min_intercept_px` 的细小截段，避免划痕和厚晶界导致的重复计数。
+其中：
+- `inside`：不接触边界
+- `edge`：接触边界但不属于角部晶粒
+- `corner`：同时接触两条相邻边
+
+### 截线法（ASTM E112 Heyn Intercept）
+
+测试图案为：**4 条线 + 3 个同心圆**
+
+```text
+l̄ = L_total / P
+G = −6.6457 × log10(l̄_mm) − 3.298
+```
+
+交点计数会过滤长度 `< min_intercept_px` 的细小截段，以减少划痕和厚晶界带来的重复计数。
 
 ---
 
 ## 输出结构
 
-```
+```text
 data/{image_name}/
-├── {name}_original.png          # 原始输入图像
-├── {name}_segmented.png         # 分割结果（伪彩色晶粒叠加）
-├── {name}_area_method.png       # 面积法标注图
-├── {name}_intercept_method.png  # 截线法标注图（ASTM 4线+3圆，红点为交点）
-├── {name}_anomaly.png           # 异常晶粒高亮图（红色标注）
-├── {name}_distribution.png      # 晶粒尺寸分布直方图
-├── {name}_labels.npy            # 完整标签矩阵（供重绘使用）
-└── {name}_results.json          # 完整分析结果（JSON）
+├── optical/
+│   ├── {name}_original.png
+│   ├── {name}_segmented.png
+│   ├── {name}_area_method.png
+│   ├── {name}_intercept_method.png
+│   ├── {name}_anomaly.png
+│   ├── {name}_distribution.png
+│   ├── {name}_labels.npy
+│   └── {name}_results.json
+└── sam3/
+    ├── {name}_original.png
+    ├── {name}_segmented.png
+    ├── {name}_area_method.png
+    ├── {name}_intercept_method.png
+    ├── {name}_anomaly.png
+    ├── {name}_distribution.png
+    ├── {name}_labels.npy
+    ├── {name}_results.json
+    ├── {name}_sam3_prompts.json
+    ├── {name}_sam3_prompts_masks.npz
+    ├── {name}_sam3_prompts_raw.json
+    └── {name}_sam3_prompts_raw_masks.npy
 ```
 
-### results.json 关键字段
+### `results.json` 关键字段
 
 ```json
 {
-  "grain_statistics": {
-    "count": 35,
-    "mean_diameter_px": 45.2,
-    "std_diameter_px": 12.1,
-    "diameters": [31.8, 40.4, 58.2]
-  },
-  "area_method": {
-    "n_inside": 27,
-    "n_intersect": 13,
-    "n_equivalent": 33.5,
-    "n_a_per_mm2": 1059.96,
-    "astm_g_value": 7.10,
-    "mean_grain_area_mm2": 9.44e-4,
-    "mean_diameter_um": 34.66,
-    "inside_grain_ids": [1, 2, 3],
-    "intersect_grain_ids": [4, 5]
-  },
-  "intercept_method": {
-    "n_lines": 4,
-    "n_circles": 3,
-    "total_intersections": 63,
-    "total_line_length_px": 3053,
-    "mean_intercept_length_um": 48.5,
-    "astm_g_value": 5.14,
-    "pattern_elements": [["line", 10, 10, 10, 200]],
-    "intersection_points": [[10, 25], [10, 57]],
-    "intersected_grain_ids": [2, 5, 8]
-  },
-  "anomaly_detection": {
-    "has_anomaly": true,
-    "total_anomalous_grains": 2,
-    "anomalous_grain_ids": [8, 13]
+  "segmentation": {
+    "backend": "sam3",
+    "method": "sam3_prompt_boxes",
+    "details": {
+      "prompt_source_labels_path": ".../optical/RG1_1_1_labels.npy",
+      "prompt_top_ratio": 0.3,
+      "prompt_selected_grain_ids": [1, 4, 7],
+      "prompt_selected_grain_count": 3,
+      "prompt_mode": "boxes_from_optical_top_area",
+      "postprocess_mode": "opening_then_closing_per_mask",
+      "mask_conversion": {
+        "original_masks": 24,
+        "morphology_processed_masks": 24,
+        "kept_masks": 18,
+        "labeled_grains": 18,
+        "postprocess": "opening_then_closing",
+        "opening_disk_size": 1,
+        "closing_disk_size": 2
+      },
+      "sam3_device": "cpu"
+    }
   }
 }
 ```
@@ -226,46 +345,22 @@ data/{image_name}/
 
 ## 代码结构
 
-```
+```text
 grain-analysis/
-├── main.py              # CLI 入口（click）
-├── environment.yml      # micromamba 环境配置
-└── src/
-    ├── preprocessing.py # 灰度化、平滑去噪（高斯/双边/各向异性）、CLAHE
-    ├── segmentation.py  # Otsu 阈值 + Watershed 分水岭分割
-    ├── analysis.py      # regionprops 特征提取、面积法、截线法（ASTM 图案）
-    ├── anomaly.py       # 三规则异常晶粒判定
-    ├── visualization.py # 标注图生成（matplotlib）
-    ├── io_utils.py      # 图像读取、目录管理、JSON 存储
-    ├── sam3_prompting.py    # SAM3 文本/box 提示构建与 fallback 判定
-    ├── sam3_postprocess.py  # SAM3 候选过滤、NMS、标签图生成
-    ├── sam3_backend.py      # SAM3 本地模型加载与零样本推理后端
-    └── pipeline.py          # 端到端流程编排（支持 watershed / sam3）
+├── README.md
+├── environment.yml
+├── main.py
 ├── scripts/
-│   ├── check_sam3_env.py
-│   ├── run_sam3_zero_shot.py
-│   ├── export_sam3_labels.py
-│   └── evaluate_sam3_vs_classical.py
-├── envs/
-│   └── sam3.yml
-└── docs/
-    └── sam3_zero_shot_review.md
+│   ├── sam3_interactive_gui.py
+│   ├── labels_to_sam3_prompts.py
+│   └── analyze_sam3_masks.py
+└── src/
+    ├── preprocessing.py
+    ├── segmentation.py
+    ├── analysis.py
+    ├── anomaly.py
+    ├── visualization.py
+    ├── io_utils.py
+    ├── pipeline.py
+    └── sam3_backend.py
 ```
-
----
-
-## 测试数据集
-
-`steel_grain_size_dataset/RG/`：480 张不锈钢 316L 光学显微镜图像
-- 格式：JPG，400×300 px
-- 分辨率：2.25 px/μm（500X）
-- 参考分割标注：`steel_grain_size_dataset/RGMask/`
-
----
-
-## 参考标准与资料
-
-- ASTM E112-13: 金属平均晶粒度测定方法
-- GBT/6394-2017: 金属平均晶粒度测定方法
-- [grain-size-analysis-metallic-materials](https://github.com/rricc22/grain-size-analysis-metallic-materials)：分水岭 + ASTM 参考实现
-- [grain-size-analysis-tools (NIST GSAT)](https://github.com/usnistgov/grain-size-analysis-tools)：截线法标准图案参考实现
