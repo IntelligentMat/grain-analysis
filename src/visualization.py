@@ -316,8 +316,9 @@ def render_all_from_results(results_json_path: str, output_dir: Optional[str] = 
     labels = np.load(labels_path)
     image = io_utils.load_image(str(image_path))
 
+    backend = results.get("segmentation", {}).get("backend")
     out_dir = (
-        io_utils.make_output_dir(output_dir, results["image_name"])
+        io_utils.make_output_dir(output_dir, results["image_name"], backend)
         if output_dir else Path(results_json_path).resolve().parent
     )
     out_dir.mkdir(parents=True, exist_ok=True)

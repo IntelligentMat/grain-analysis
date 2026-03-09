@@ -16,15 +16,10 @@ import numpy as np
 from src import pipeline
 
 
-class TestPipelineWatershed(unittest.TestCase):
-    """Exercise the full watershed pipeline on a deterministic fixture image."""
+class TestPipelineOptical(unittest.TestCase):
+    """Exercise the full optical pipeline on a deterministic fixture image."""
 
-    def test_pipeline_runs_classical_flow_on_grid_fixture(self):
-        """Verify segmentation, metrics, and exported artifacts from one full run."""
-
-        # The fixture is a 3x3 grid of synthetic grains. Because its geometry is
-        # regular and deterministic, it is well suited for checking the complete
-        # pipeline from image loading through report export.
+    def test_pipeline_runs_optical_flow_on_grid_fixture(self):
         fixture = Path(__file__).resolve().parent / 'fixtures' / 'grid_fixture.png'
         self.assertTrue(fixture.exists(), f'Missing fixture: {fixture}')
 
@@ -36,7 +31,7 @@ class TestPipelineWatershed(unittest.TestCase):
                 gaussian_sigma=0.8,
                 median_kernel=1,
                 clahe_clip_limit=1.0,
-                segmentation_backend='watershed',
+                segmentation_backend='optical',
                 min_distance=8,
                 closing_disk_size=1,
                 opening_disk_size=1,
@@ -46,12 +41,11 @@ class TestPipelineWatershed(unittest.TestCase):
                 min_intercept_px=3,
             )
 
-            # High-level summary values should reflect a 9-grain watershed result.
-            self.assertEqual(result['segmentation_backend'], 'watershed')
+            self.assertEqual(result['segmentation_backend'], 'optical')
+            self.assertEqual(result['segmentation_method'], 'watershed')
             self.assertEqual(result['total_grains'], 9)
+            self.assertTrue(Path(result['output_dir']).as_posix().endswith('/grid_fixture/optical'))
 
-            # Area-method bookkeeping should separate one interior grain, four
-            # edge grains, and four corner grains in the 3x3 layout.
             self.assertAlmostEqual(result['area_result'].n_inside, 1)
             self.assertAlmostEqual(result['area_result'].n_edge, 4)
             self.assertAlmostEqual(result['area_result'].n_corner, 4)
@@ -60,7 +54,6 @@ class TestPipelineWatershed(unittest.TestCase):
             self.assertEqual(result['area_result'].edge_grain_ids, [2, 4, 6, 7])
             self.assertEqual(result['area_result'].corner_grain_ids, [1, 3, 8, 9])
 
-            # Intercept-method outputs should remain stable for the same grid.
             self.assertAlmostEqual(result['intercept_result'].total_intersections, 21.0)
             self.assertAlmostEqual(result['intercept_result'].n_l_per_px, 0.02489650347979036)
             self.assertAlmostEqual(result['intercept_result'].mean_intercept_length_um, 40.16628282006532)
@@ -68,17 +61,12 @@ class TestPipelineWatershed(unittest.TestCase):
 
             labels_path = Path(result['paths']['labels'])
             json_path = Path(result['paths']['json'])
-
-            # The run should materialize all expected output artifacts.
             self.assertTrue(labels_path.exists())
             self.assertTrue(json_path.exists())
             for key in ['original', 'segmented', 'area', 'intercept', 'anomaly']:
                 self.assertTrue(Path(result['paths'][key]).exists(), key)
 
             labels = np.load(labels_path)
-
-            # Saved labels should preserve the 3x3 layout and assign a unique
-            # nonzero grain id to each grid cell center.
             self.assertEqual(labels.shape, (90, 90))
             self.assertEqual(int(labels.max()), 9)
             centers = [(15, 15), (15, 45), (15, 75), (45, 15), (45, 45), (45, 75), (75, 15), (75, 45), (75, 75)]
@@ -88,7 +76,7 @@ class TestPipelineWatershed(unittest.TestCase):
             with open(json_path, 'r', encoding='utf-8') as handle:
                 payload = json.load(handle)
 
-            # The exported JSON report should mirror the in-memory analysis.
+            self.assertEqual(payload['segmentation']['backend'], 'optical')
             self.assertEqual(payload['segmentation']['method'], 'watershed')
             self.assertEqual(payload['intercept_method']['counting_basis'], 'grain_segments_n')
             self.assertEqual(payload['area_method']['n_edge'], 4)
@@ -97,7 +85,3 @@ class TestPipelineWatershed(unittest.TestCase):
             self.assertEqual(payload['area_method']['corner_grain_ids'], [1, 3, 8, 9])
             self.assertEqual(payload['intercept_method']['intersected_grain_ids'], [1, 2, 3, 4, 5, 6, 7, 8, 9])
             self.assertAlmostEqual(payload['intercept_method']['total_intersections'], 21.0)
-
-
-if __name__ == '__main__':
-    unittest.main()

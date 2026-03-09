@@ -8,28 +8,19 @@ io_utils.py — 输入输出与结果存储模块
 """
 
 import json
-import numpy as np
-import cv2
 from pathlib import Path
 from typing import Any, List
 
-from src.analysis import GrainStatistics, AreaMethodResult, InterceptMethodResult
+import cv2
+import numpy as np
+
+from src.analysis import AreaMethodResult, GrainStatistics, InterceptMethodResult
 from src.anomaly import AnomalyResult
-
-
-# ─────────────────────────── 图像读取 ──────────────────────────────
 
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 
 def load_image(image_path: str) -> np.ndarray:
-    """
-    读取图像文件，返回 BGR uint8 数组（opencv 格式）。
-
-    Raises:
-        FileNotFoundError: 文件不存在
-        ValueError: 无法解码图像
-    """
     path = Path(image_path)
     if not path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
@@ -41,57 +32,36 @@ def load_image(image_path: str) -> np.ndarray:
 
 
 def collect_images(input_path: str) -> List[str]:
-    """
-    返回输入路径下所有支持格式的图像文件路径列表。
-
-    Args:
-        input_path: 文件路径或文件夹路径
-
-    Returns:
-        图像文件路径列表（已排序）
-    """
     p = Path(input_path)
     if p.is_file():
         return [str(p)]
     if p.is_dir():
-        files = sorted([str(f) for f in p.iterdir()
-                        if f.suffix.lower() in SUPPORTED_EXTS])
-        return files
+        return sorted([str(f) for f in p.iterdir() if f.suffix.lower() in SUPPORTED_EXTS])
     raise ValueError(f"Input path not found: {input_path}")
 
 
-# ─────────────────────────── 目录管理 ──────────────────────────────
-
-def make_output_dir(base_output: str, image_name: str) -> Path:
-    """
-    创建输出子目录：{base_output}/{image_name}/
-
-    Returns:
-        输出目录 Path 对象
-    """
+def make_output_dir(base_output: str, image_name: str, backend: str | None = None) -> Path:
     out_dir = Path(base_output) / image_name
+    if backend:
+        out_dir = out_dir / backend
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
 
 def output_paths(out_dir: Path, name: str) -> dict:
-    """返回各输出文件的完整路径字典。"""
     return {
-        "original":  str(out_dir / f"{name}_original.png"),
+        "original": str(out_dir / f"{name}_original.png"),
         "segmented": str(out_dir / f"{name}_segmented.png"),
-        "area":      str(out_dir / f"{name}_area_method.png"),
+        "area": str(out_dir / f"{name}_area_method.png"),
         "intercept": str(out_dir / f"{name}_intercept_method.png"),
-        "anomaly":   str(out_dir / f"{name}_anomaly.png"),
+        "anomaly": str(out_dir / f"{name}_anomaly.png"),
         "distribution": str(out_dir / f"{name}_distribution.png"),
-        "labels":    str(out_dir / f"{name}_labels.npy"),
-        "json":      str(out_dir / f"{name}_results.json"),
+        "labels": str(out_dir / f"{name}_labels.npy"),
+        "json": str(out_dir / f"{name}_results.json"),
     }
 
 
-# ─────────────────────────── JSON 序列化 ───────────────────────────
-
 def _to_serializable(obj):
-    """递归将 numpy 类型转为 Python 原生类型。"""
     if isinstance(obj, (np.bool_,)):
         return bool(obj)
     if isinstance(obj, (np.integer,)):
@@ -108,18 +78,15 @@ def _to_serializable(obj):
 
 
 def save_labels(output_path: str, labels: np.ndarray) -> None:
-    """保存分割标签矩阵，供后续重绘使用。"""
     np.save(output_path, labels)
 
 
 def load_results_json(results_json_path: str) -> dict[str, Any]:
-    """读取结果 JSON。"""
     with open(results_json_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_json(output_path: str, payload: dict[str, Any]) -> None:
-    """将字典写入 JSON 文件。"""
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(_to_serializable(payload), f, indent=2, ensure_ascii=False)
 
@@ -130,6 +97,7 @@ def save_results_json(
     image_name: str,
     image_path: str,
     image_shape: tuple[int, ...],
+    segmentation_backend: str,
     segmentation_method: str,
     segmentation_params: dict,
     total_grains: int,
@@ -140,8 +108,6 @@ def save_results_json(
     extra_artifacts: dict[str, Any] | None = None,
     segmentation_details: dict[str, Any] | None = None,
 ) -> None:
-    """将分析结果写入 JSON 文件。"""
-
     def _rule_a(r):
         return {
             "triggered": r.triggered,
@@ -176,6 +142,7 @@ def save_results_json(
             **(extra_artifacts or {}),
         },
         "segmentation": {
+            "backend": segmentation_backend,
             "method": segmentation_method,
             "total_grains": total_grains,
             "params": segmentation_params,
