@@ -151,9 +151,21 @@ class TransformersSam3Backend:
             target_sizes=target_sizes.tolist() if hasattr(target_sizes, "tolist") else target_sizes,
         )[0]
 
-        masks = results["masks"].detach().cpu().numpy() if len(results["masks"]) else np.empty((0, image.height, image.width), dtype=bool)
-        boxes = results["boxes"].detach().cpu().numpy() if len(results["boxes"]) else np.empty((0, 4), dtype=np.float32)
-        scores = results["scores"].detach().cpu().numpy() if len(results["scores"]) else np.empty((0,), dtype=np.float32)
+        masks = (
+            results["masks"].detach().cpu().numpy()
+            if len(results["masks"])
+            else np.empty((0, image.height, image.width), dtype=bool)
+        )
+        boxes = (
+            results["boxes"].detach().cpu().numpy()
+            if len(results["boxes"])
+            else np.empty((0, 4), dtype=np.float32)
+        )
+        scores = (
+            results["scores"].detach().cpu().numpy()
+            if len(results["scores"])
+            else np.empty((0,), dtype=np.float32)
+        )
 
         return {
             "masks": masks.astype(bool),
@@ -163,7 +175,9 @@ class TransformersSam3Backend:
         }
 
 
-def _postprocess_mask(mask: np.ndarray, opening_disk_size: int = 1, closing_disk_size: int = 2) -> np.ndarray:
+def _postprocess_mask(
+    mask: np.ndarray, opening_disk_size: int = 1, closing_disk_size: int = 2
+) -> np.ndarray:
     result = mask.astype(bool)
     if opening_disk_size > 0:
         result = binary_opening(result, disk(int(opening_disk_size)))
@@ -229,11 +243,15 @@ def select_top_grain_prompts(
 
     props = list(regionprops(labels))
     if not props:
-        empty_masks = np.empty((0, *labels.shape), dtype=bool) if mode in {"masks", "both"} else None
+        empty_masks = (
+            np.empty((0, *labels.shape), dtype=bool) if mode in {"masks", "both"} else None
+        )
         return [], empty_masks
 
     selected_count = max(1, int(math.ceil(len(props) * float(top_ratio))))
-    selected_props = sorted(props, key=lambda prop: (-int(prop.area), int(prop.label)))[:selected_count]
+    selected_props = sorted(props, key=lambda prop: (-int(prop.area), int(prop.label)))[
+        :selected_count
+    ]
 
     prompts: list[GrainPrompt] = []
     masks: list[np.ndarray] = []
@@ -255,7 +273,11 @@ def select_top_grain_prompts(
 
     masks_array = None
     if mode in {"masks", "both"}:
-        masks_array = np.stack(masks, axis=0).astype(bool) if masks else np.empty((0, *labels.shape), dtype=bool)
+        masks_array = (
+            np.stack(masks, axis=0).astype(bool)
+            if masks
+            else np.empty((0, *labels.shape), dtype=bool)
+        )
     return prompts, masks_array
 
 
@@ -319,7 +341,9 @@ def run_prompted_sam3(
     prompt_boxes = [prompt.as_prompt_box() for prompt in prompts]
 
     if not prompt_boxes:
-        empty_labels = np.zeros(np.asarray(Image.open(image_path).convert("RGB")).shape[:2], dtype=np.int32)
+        empty_labels = np.zeros(
+            np.asarray(Image.open(image_path).convert("RGB")).shape[:2], dtype=np.int32
+        )
         return {
             "labels": empty_labels,
             "prompt_paths": prompt_paths,
@@ -361,7 +385,9 @@ def run_prompted_sam3(
         "boxes": np.asarray(result["boxes"], dtype=np.float32).tolist(),
         "prompt_selected_grain_ids": [prompt.grain_id for prompt in prompts],
     }
-    raw_json_path.write_text(json.dumps(raw_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    raw_json_path.write_text(
+        json.dumps(raw_payload, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
     labels, mask_stats = masks_to_labels(
         np.asarray(result["masks"], dtype=bool),

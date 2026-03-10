@@ -16,45 +16,46 @@ from typing import List, Dict, Any
 
 # ─────────────────────────── 数据结构 ──────────────────────────────
 
+
 @dataclass
 class GrainProps:
-    grain_id: int                 # 晶粒标签 ID（与 labels 中的整数标签一致）
-    area_px2: float               # 晶粒面积，单位 px²
-    perimeter_px: float           # 晶粒周长，单位 px
-    equivalent_diameter_px: float # 等效圆直径，单位 px，公式 sqrt(4A/pi)
-    aspect_ratio: float           # 长短轴比（major_axis/minor_axis）
-    circularity: float            # 圆度 4*pi*A/P^2，越接近 1 越圆
-    centroid: tuple               # 质心坐标 (row, col)
-    bbox: tuple                   # 外接框 (min_row, min_col, max_row, max_col)，右开边界
+    grain_id: int  # 晶粒标签 ID（与 labels 中的整数标签一致）
+    area_px2: float  # 晶粒面积，单位 px²
+    perimeter_px: float  # 晶粒周长，单位 px
+    equivalent_diameter_px: float  # 等效圆直径，单位 px，公式 sqrt(4A/pi)
+    aspect_ratio: float  # 长短轴比（major_axis/minor_axis）
+    circularity: float  # 圆度 4*pi*A/P^2，越接近 1 越圆
+    centroid: tuple  # 质心坐标 (row, col)
+    bbox: tuple  # 外接框 (min_row, min_col, max_row, max_col)，右开边界
 
 
 @dataclass
 class GrainStatistics:
-    count: int                    # 晶粒总数
-    mean_diameter_px: float       # 等效直径均值（px）
-    std_diameter_px: float        # 等效直径标准差（px）
-    min_diameter_px: float        # 等效直径最小值（px）
-    max_diameter_px: float        # 等效直径最大值（px）
-    median_diameter_px: float     # 等效直径中位数（px）
-    p10_diameter_px: float        # 等效直径 10 分位（px）
-    p90_diameter_px: float        # 等效直径 90 分位（px）
-    mean_area_px2: float          # 晶粒面积均值（px^2）
-    total_area_px2: float         # 晶粒面积总和（px^2）
+    count: int  # 晶粒总数
+    mean_diameter_px: float  # 等效直径均值（px）
+    std_diameter_px: float  # 等效直径标准差（px）
+    min_diameter_px: float  # 等效直径最小值（px）
+    max_diameter_px: float  # 等效直径最大值（px）
+    median_diameter_px: float  # 等效直径中位数（px）
+    p10_diameter_px: float  # 等效直径 10 分位（px）
+    p90_diameter_px: float  # 等效直径 90 分位（px）
+    mean_area_px2: float  # 晶粒面积均值（px^2）
+    total_area_px2: float  # 晶粒面积总和（px^2）
     diameters: List[float] = field(default_factory=list)  # 所有晶粒等效直径列表（px）
     areas_px2: List[float] = field(default_factory=list)  # 所有晶粒面积列表（px^2）
 
 
 @dataclass
 class AreaMethodResult:
-    n_inside: int                 # 完全落在测量区域内部的晶粒数
-    n_intersect: int              # 与测量区域边界接触的晶粒总数（edge + corner）
-    n_edge: int                   # 接触边界但不属于角部晶粒的晶粒数（权重 1/2）
-    n_corner: int                 # 同时接触两条相邻边的角部晶粒数（权重 1/4）
-    n_equivalent: float           # 等效晶粒数 N_eq = N_inside + 0.5*N_edge + 0.25*N_corner
-    n_a_per_mm2: float            # 面密度 N_A（grains/mm²）
-    astm_g_value: float           # ASTM E112 对应的 G 值
-    mean_grain_area_mm2: float    # 等效平均晶粒面积（mm²）
-    mean_diameter_um: float       # 面积法推导的平均等效直径（μm）
+    n_inside: int  # 完全落在测量区域内部的晶粒数
+    n_intersect: int  # 与测量区域边界接触的晶粒总数（edge + corner）
+    n_edge: int  # 接触边界但不属于角部晶粒的晶粒数（权重 1/2）
+    n_corner: int  # 同时接触两条相邻边的角部晶粒数（权重 1/4）
+    n_equivalent: float  # 等效晶粒数 N_eq = N_inside + 0.5*N_edge + 0.25*N_corner
+    n_a_per_mm2: float  # 面密度 N_A（grains/mm²）
+    astm_g_value: float  # ASTM E112 对应的 G 值
+    mean_grain_area_mm2: float  # 等效平均晶粒面积（mm²）
+    mean_diameter_um: float  # 面积法推导的平均等效直径（μm）
     inside_grain_ids: List[int] = field(default_factory=list)
     edge_grain_ids: List[int] = field(default_factory=list)
     corner_grain_ids: List[int] = field(default_factory=list)
@@ -63,18 +64,20 @@ class AreaMethodResult:
 
 @dataclass
 class InterceptMethodResult:
-    n_lines: int                  # 测试线数量（ASTM E112：4）
-    n_circles: int                # 同心圆数量（ASTM E112：3）
-    total_intersections: float    # 总截距数/晶粒段数（开放路径端段按 0.5）
-    total_line_length_px: float   # 总测试路径长度（线长 + 圆周长）（px）
-    n_l_per_px: float             # 截距数密度 N_L（intercepts/px）
+    n_lines: int  # 测试线数量（ASTM E112：4）
+    n_circles: int  # 同心圆数量（ASTM E112：3）
+    total_intersections: float  # 总截距数/晶粒段数（开放路径端段按 0.5）
+    total_line_length_px: float  # 总测试路径长度（线长 + 圆周长）（px）
+    n_l_per_px: float  # 截距数密度 N_L（intercepts/px）
     mean_intercept_length_px: float  # 平均截距长度 l_bar（px）
     mean_intercept_length_um: float  # 平均截距长度 l_bar（μm）
-    astm_g_value: float           # ASTM E112 对应的 G 值（基于物理单位 mm）
+    astm_g_value: float  # ASTM E112 对应的 G 值（基于物理单位 mm）
     pattern_elements: List[tuple] = field(default_factory=list)
     # ('line', r1,c1,r2,c2) 或 ('circle', r_c,c_c,radius)，用于可视化
     intersection_points: List[tuple] = field(default_factory=list)  # 有效晶粒段代表点（用于可视化）
-    half_intersection_points: List[tuple] = field(default_factory=list)  # 开放路径端段（计 0.5）的代表点
+    half_intersection_points: List[tuple] = field(
+        default_factory=list
+    )  # 开放路径端段（计 0.5）的代表点
     intersected_grain_ids: List[int] = field(default_factory=list)
 
 
@@ -87,6 +90,7 @@ def _validate_pixels_per_micron(pixels_per_micron: float) -> float:
 
 
 # ─────────────────────────── 特征提取 ──────────────────────────────
+
 
 def extract_grain_props(labels: np.ndarray) -> List[GrainProps]:
     """
@@ -109,18 +113,20 @@ def extract_grain_props(labels: np.ndarray) -> List[GrainProps]:
         aspect_ratio = major / minor if minor > 0 else 1.0
 
         perim = prop.perimeter
-        circularity = (4 * np.pi * prop.area / (perim ** 2)) if perim > 0 else 0.0
+        circularity = (4 * np.pi * prop.area / (perim**2)) if perim > 0 else 0.0
 
-        props_list.append(GrainProps(
-            grain_id=prop.label,
-            area_px2=area_px2,
-            perimeter_px=perim,
-            equivalent_diameter_px=equiv_d_px,
-            aspect_ratio=aspect_ratio,
-            circularity=circularity,
-            centroid=prop.centroid,
-            bbox=prop.bbox,
-        ))
+        props_list.append(
+            GrainProps(
+                grain_id=prop.label,
+                area_px2=area_px2,
+                perimeter_px=perim,
+                equivalent_diameter_px=equiv_d_px,
+                aspect_ratio=aspect_ratio,
+                circularity=circularity,
+                centroid=prop.centroid,
+                bbox=prop.bbox,
+            )
+        )
 
     return props_list
 
@@ -151,8 +157,8 @@ def compute_grain_statistics(grain_props: List[GrainProps]) -> GrainStatistics:
 
 # ─────────────────────────── 面积法 ────────────────────────────────
 
-def area_method(labels: np.ndarray,
-                pixels_per_micron: float = 1.0) -> AreaMethodResult:
+
+def area_method(labels: np.ndarray, pixels_per_micron: float = 1.0) -> AreaMethodResult:
     """
     Jeffries 平面测定法（ASTM E112 面积法）。
 
@@ -202,14 +208,16 @@ def area_method(labels: np.ndarray,
     n_corner = len(corner_grain_ids)
 
     n_equivalent = n_inside + 0.5 * n_edge + 0.25 * n_corner
-    area_um2 = area_px / (pixels_per_micron ** 2)           # px² → μm²
-    area_mm2 = area_um2 / 1e6                               # μm² → mm²
+    area_um2 = area_px / (pixels_per_micron**2)  # px² → μm²
+    area_mm2 = area_um2 / 1e6  # μm² → mm²
     n_a = n_equivalent / area_mm2 if area_mm2 > 0 else 0.0  # grains/mm²
 
     # ASTM G 与 N_A 正相关（N_A 越大，晶粒越细，G 越大）
     g_value = 3.322 * np.log10(n_a) - 2.954 if n_a > 0 else 0.0
 
-    mean_grain_area_mm2 = 1.0 / n_a if n_a > 0 else 0.0  # 这是 1 / N_A 推导的等效平均面积，不是逐晶粒实测均值
+    mean_grain_area_mm2 = (
+        1.0 / n_a if n_a > 0 else 0.0
+    )  # 这是 1 / N_A 推导的等效平均面积，不是逐晶粒实测均值
     mean_grain_area_um2 = mean_grain_area_mm2 * 1e6
     mean_diameter_um = np.sqrt(4 * mean_grain_area_um2 / np.pi)
 
@@ -232,10 +240,13 @@ def area_method(labels: np.ndarray,
 
 # ─────────────────────────── 截线法 ────────────────────────────────
 
-def intercept_method(labels: np.ndarray,
-                     pixels_per_micron: float = 1.0,
-                     min_intercept_px: int = 3,
-                     margin_ratio: float = 0.05) -> InterceptMethodResult:
+
+def intercept_method(
+    labels: np.ndarray,
+    pixels_per_micron: float = 1.0,
+    min_intercept_px: int = 3,
+    margin_ratio: float = 0.05,
+) -> InterceptMethodResult:
     """
     Heyn 截距法 — 按 ASTM E112 标准图样估计平均截距长度与晶粒度等级。
 
@@ -282,7 +293,7 @@ def intercept_method(labels: np.ndarray,
     # - (r_c, c_c) 是同心圆圆心；
     # - margin 控制开放测试线距离边界的留白。
     height, width = labels.shape
-    size = min(height, width)          # 以较短边为基准（保证圆不超出图像）
+    size = min(height, width)  # 以较短边为基准（保证圆不超出图像）
     r_c = height // 2
     c_c = width // 2
     margin = max(1, int(margin_ratio * size))
@@ -305,10 +316,10 @@ def intercept_method(labels: np.ndarray,
     # 每个元组是 (r1, c1, r2, c2)。
     # 开放路径有明确起点和终点，所以末端被截断的晶粒段可能按 0.5 计权。
     line_defs = [
-        (height - 1 - margin, margin,   height - 1 - margin, width - 1 - margin),  # 水平（底部）
-        (margin,              margin,   height - 1 - margin,  margin),              # 垂直（左侧）
-        (margin,       margin,        height - 1 - margin, width - 1 - margin),     # 对角 ↘
-        (height - 1 - margin, margin, margin,           width - 1 - margin),        # 对角 ↗
+        (height - 1 - margin, margin, height - 1 - margin, width - 1 - margin),  # 水平（底部）
+        (margin, margin, height - 1 - margin, margin),  # 垂直（左侧）
+        (margin, margin, height - 1 - margin, width - 1 - margin),  # 对角 ↘
+        (height - 1 - margin, margin, margin, width - 1 - margin),  # 对角 ↗
     ]
     for r1, c1, r2, c2 in line_defs:
         # 先把连续几何直线离散成像素路径，并裁掉理论上可能越界的点。
@@ -325,17 +336,18 @@ def intercept_method(labels: np.ndarray,
         # _count_intercepts: 把连续晶粒段转成计权后的 N；
         # _intercept_positions_on_path: 给每个有效段选一个代表点；
         # _half_intercept_positions_on_path: 单独记录按 0.5 计权的端段位置。
-        total_intersections += _count_intercepts(line_labels, min_intercept_px,
-                                                 is_closed=False)
+        total_intersections += _count_intercepts(line_labels, min_intercept_px, is_closed=False)
         intersection_points += _intercept_positions_on_path(
-            line_labels, rr, cc, min_intercept_px, is_closed=False)
+            line_labels, rr, cc, min_intercept_px, is_closed=False
+        )
         half_intersection_points += _half_intercept_positions_on_path(
-            line_labels, rr, cc, min_intercept_px, is_closed=False)
+            line_labels, rr, cc, min_intercept_px, is_closed=False
+        )
 
         # 长度使用两端点欧氏距离，而不是简单的像素个数，
         # 这样对角线与水平/垂直线的长度具有一致的连续几何意义。
         total_length_px += float(np.sqrt((r2 - r1) ** 2 + (c2 - c1) ** 2))
-        pattern_elements.append(('line', r1, c1, r2, c2))
+        pattern_elements.append(("line", r1, c1, r2, c2))
 
     # ── 3 个闭合同心圆（ASTM E112 标准半径比例）─────────────────────────
     # 圆是闭合路径，没有“起点/终点截断”的概念，因此有效晶粒段统一按 1.0 计数。
@@ -354,14 +366,14 @@ def intercept_method(labels: np.ndarray,
             _intercepted_grain_ids_on_path(circ_labels, min_intercept_px, is_closed=True)
         )
 
-        total_intersections += _count_intercepts(circ_labels, min_intercept_px,
-                                                 is_closed=True)
+        total_intersections += _count_intercepts(circ_labels, min_intercept_px, is_closed=True)
         intersection_points += _intercept_positions_on_path(
-            circ_labels, rr, cc, min_intercept_px, is_closed=True)
+            circ_labels, rr, cc, min_intercept_px, is_closed=True
+        )
 
         # 闭合圆路径长度直接使用连续几何圆周长 2πr。
         total_length_px += 2.0 * np.pi * radius
-        pattern_elements.append(('circle', r_c, c_c, radius))
+        pattern_elements.append(("circle", r_c, c_c, radius))
 
     # ── 从 N 和 L 推导 ASTM 结果 ───────────────────────────────────────
     # N_L = N / L：单位长度上的截距数密度；
@@ -371,8 +383,7 @@ def intercept_method(labels: np.ndarray,
     mean_intercept_px = 1.0 / n_l_per_px if n_l_per_px > 0 else 0.0
     mean_intercept_um = mean_intercept_px / pixels_per_micron
     mean_intercept_mm = mean_intercept_um / 1000.0
-    g_value = (-6.6457 * np.log10(mean_intercept_mm) - 3.298
-               if mean_intercept_mm > 0 else 0.0)
+    g_value = -6.6457 * np.log10(mean_intercept_mm) - 3.298 if mean_intercept_mm > 0 else 0.0
 
     return InterceptMethodResult(
         n_lines=4,
@@ -430,9 +441,9 @@ def _get_grain_segments(line_labels: np.ndarray) -> list:
     return segments
 
 
-def _valid_grain_segment_groups(line_labels: np.ndarray,
-                                min_intercept_px: int = 3,
-                                is_closed: bool = False) -> list[list[tuple[int, int, int]]]:
+def _valid_grain_segment_groups(
+    line_labels: np.ndarray, min_intercept_px: int = 3, is_closed: bool = False
+) -> list[list[tuple[int, int, int]]]:
     """返回参与截距统计的有效晶粒段分组。
 
     先用 `_get_grain_segments` 找到所有连续非零晶粒段，再做两步处理：
@@ -451,9 +462,9 @@ def _valid_grain_segment_groups(line_labels: np.ndarray,
     return groups
 
 
-def _count_intercepts(line_labels: np.ndarray,
-                      min_intercept_px: int = 3,
-                      is_closed: bool = False) -> float:
+def _count_intercepts(
+    line_labels: np.ndarray, min_intercept_px: int = 3, is_closed: bool = False
+) -> float:
     """把有效晶粒段分组转换成截距计数 N。
 
     计数规则：
@@ -481,9 +492,9 @@ def _count_intercepts(line_labels: np.ndarray,
     return total
 
 
-def _intercepted_grain_ids_on_path(line_labels: np.ndarray,
-                                   min_intercept_px: int = 3,
-                                   is_closed: bool = False) -> set[int]:
+def _intercepted_grain_ids_on_path(
+    line_labels: np.ndarray, min_intercept_px: int = 3, is_closed: bool = False
+) -> set[int]:
     """返回某条路径上真正参与统计的晶粒 ID。
 
     这里不会返回所有“碰到过”的标签，而只返回形成了有效晶粒段的标签，
@@ -493,8 +504,7 @@ def _intercepted_grain_ids_on_path(line_labels: np.ndarray,
     return {int(seg[2]) for group in groups for seg in group}
 
 
-def _sort_circle_pixels(rr: np.ndarray, cc: np.ndarray,
-                        r_center: int, c_center: int):
+def _sort_circle_pixels(rr: np.ndarray, cc: np.ndarray, r_center: int, c_center: int):
     """按极角对圆周像素排序，恢复沿圆周行走的顺序。
 
     `circle_perimeter` 返回的是一组圆周像素，但它们的顺序不一定对应
@@ -507,11 +517,13 @@ def _sort_circle_pixels(rr: np.ndarray, cc: np.ndarray,
     return rr[order], cc[order]
 
 
-def _intercept_positions_on_path(path_labels: np.ndarray,
-                                 path_r: np.ndarray,
-                                 path_c: np.ndarray,
-                                 min_intercept_px: int = 3,
-                                 is_closed: bool = False) -> List[tuple]:
+def _intercept_positions_on_path(
+    path_labels: np.ndarray,
+    path_r: np.ndarray,
+    path_c: np.ndarray,
+    min_intercept_px: int = 3,
+    is_closed: bool = False,
+) -> List[tuple]:
     """为每个有效晶粒段选择一个代表点坐标。
 
     这些点主要用于可视化：在图上标出“这里存在一个被计入统计的截段”。
@@ -542,11 +554,13 @@ def _intercept_positions_on_path(path_labels: np.ndarray,
     return points
 
 
-def _half_intercept_positions_on_path(path_labels: np.ndarray,
-                                      path_r: np.ndarray,
-                                      path_c: np.ndarray,
-                                      min_intercept_px: int = 3,
-                                      is_closed: bool = False) -> List[tuple]:
+def _half_intercept_positions_on_path(
+    path_labels: np.ndarray,
+    path_r: np.ndarray,
+    path_c: np.ndarray,
+    min_intercept_px: int = 3,
+    is_closed: bool = False,
+) -> List[tuple]:
     """返回开放路径上按 0.5 计权的端段代表点。
 
     这个函数是 `_intercept_positions_on_path` 的补充：

@@ -127,7 +127,9 @@ class TransformersSam3Backend:
         try:
             from transformers import pipeline
         except Exception as exc:
-            raise Sam3InferenceError("Failed to import transformers pipeline for automatic mask generation.") from exc
+            raise Sam3InferenceError(
+                "Failed to import transformers pipeline for automatic mask generation."
+            ) from exc
 
         torch_dtype = self._torch.float32
         if self.device == "cuda":
@@ -201,7 +203,9 @@ class TransformersSam3Backend:
         height, width = image.height, image.width
         masks_array = np.stack(masks, axis=0) if masks else np.empty((0, height, width), dtype=bool)
         boxes_array = np.stack(boxes, axis=0) if boxes else np.empty((0, 4), dtype=np.float32)
-        scores_array = np.asarray(scores, dtype=np.float32) if scores else np.empty((0,), dtype=np.float32)
+        scores_array = (
+            np.asarray(scores, dtype=np.float32) if scores else np.empty((0,), dtype=np.float32)
+        )
 
         return {
             "masks": masks_array,
@@ -259,9 +263,21 @@ class TransformersSam3Backend:
             target_sizes=target_sizes.tolist() if hasattr(target_sizes, "tolist") else target_sizes,
         )[0]
 
-        masks = results["masks"].detach().cpu().numpy() if len(results["masks"]) else np.empty((0, image.height, image.width), dtype=bool)
-        boxes = results["boxes"].detach().cpu().numpy() if len(results["boxes"]) else np.empty((0, 4), dtype=np.float32)
-        scores = results["scores"].detach().cpu().numpy() if len(results["scores"]) else np.empty((0,), dtype=np.float32)
+        masks = (
+            results["masks"].detach().cpu().numpy()
+            if len(results["masks"])
+            else np.empty((0, image.height, image.width), dtype=bool)
+        )
+        boxes = (
+            results["boxes"].detach().cpu().numpy()
+            if len(results["boxes"])
+            else np.empty((0, 4), dtype=np.float32)
+        )
+        scores = (
+            results["scores"].detach().cpu().numpy()
+            if len(results["scores"])
+            else np.empty((0,), dtype=np.float32)
+        )
 
         return {
             "masks": masks.astype(bool),
@@ -337,22 +353,38 @@ class Sam3InteractiveApp:
         )
 
         row = 0
-        ttk.Button(controls_frame, text="Open Image", command=self.on_open_image).grid(row=row, column=0, sticky="ew")
+        ttk.Button(controls_frame, text="Open Image", command=self.on_open_image).grid(
+            row=row, column=0, sticky="ew"
+        )
         row += 1
-        ttk.Button(controls_frame, text="Import Traditional Prompts", command=self.on_import_traditional_prompts).grid(row=row, column=0, sticky="ew", pady=(6, 0))
-        row += 1
-
-        ttk.Label(controls_frame, text="Import min area").grid(row=row, column=0, sticky="w", pady=(12, 4))
-        row += 1
-        ttk.Entry(controls_frame, textvariable=self.import_min_area_var).grid(row=row, column=0, sticky="ew")
-        row += 1
-
-        ttk.Label(controls_frame, text="Import top boxes").grid(row=row, column=0, sticky="w", pady=(12, 4))
-        row += 1
-        ttk.Entry(controls_frame, textvariable=self.import_top_boxes_var).grid(row=row, column=0, sticky="ew")
+        ttk.Button(
+            controls_frame,
+            text="Import Traditional Prompts",
+            command=self.on_import_traditional_prompts,
+        ).grid(row=row, column=0, sticky="ew", pady=(6, 0))
         row += 1
 
-        ttk.Label(controls_frame, text="Text prompt").grid(row=row, column=0, sticky="w", pady=(12, 4))
+        ttk.Label(controls_frame, text="Import min area").grid(
+            row=row, column=0, sticky="w", pady=(12, 4)
+        )
+        row += 1
+        ttk.Entry(controls_frame, textvariable=self.import_min_area_var).grid(
+            row=row, column=0, sticky="ew"
+        )
+        row += 1
+
+        ttk.Label(controls_frame, text="Import top boxes").grid(
+            row=row, column=0, sticky="w", pady=(12, 4)
+        )
+        row += 1
+        ttk.Entry(controls_frame, textvariable=self.import_top_boxes_var).grid(
+            row=row, column=0, sticky="ew"
+        )
+        row += 1
+
+        ttk.Label(controls_frame, text="Text prompt").grid(
+            row=row, column=0, sticky="w", pady=(12, 4)
+        )
         row += 1
         prompt_entry = ttk.Entry(controls_frame, textvariable=self.prompt_var)
         prompt_entry.grid(row=row, column=0, sticky="ew")
@@ -362,11 +394,17 @@ class Sam3InteractiveApp:
         row += 1
         mode_frame = ttk.Frame(controls_frame)
         mode_frame.grid(row=row, column=0, sticky="ew")
-        ttk.Radiobutton(mode_frame, text="Positive", value="positive", variable=self.draw_mode).pack(anchor="w")
-        ttk.Radiobutton(mode_frame, text="Negative", value="negative", variable=self.draw_mode).pack(anchor="w")
+        ttk.Radiobutton(
+            mode_frame, text="Positive", value="positive", variable=self.draw_mode
+        ).pack(anchor="w")
+        ttk.Radiobutton(
+            mode_frame, text="Negative", value="negative", variable=self.draw_mode
+        ).pack(anchor="w")
         row += 1
 
-        ttk.Label(controls_frame, text="Prompt boxes").grid(row=row, column=0, sticky="w", pady=(12, 4))
+        ttk.Label(controls_frame, text="Prompt boxes").grid(
+            row=row, column=0, sticky="w", pady=(12, 4)
+        )
         row += 1
         self.box_list = tk.Listbox(controls_frame, height=8)
         self.box_list.grid(row=row, column=0, sticky="nsew")
@@ -377,37 +415,63 @@ class Sam3InteractiveApp:
         box_buttons.grid(row=row, column=0, sticky="ew", pady=(6, 0))
         box_buttons.columnconfigure(0, weight=1)
         box_buttons.columnconfigure(1, weight=1)
-        ttk.Button(box_buttons, text="Remove Selected", command=self.on_remove_selected_box).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ttk.Button(box_buttons, text="Clear Boxes", command=self.on_clear_boxes).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        ttk.Button(box_buttons, text="Remove Selected", command=self.on_remove_selected_box).grid(
+            row=0, column=0, sticky="ew", padx=(0, 4)
+        )
+        ttk.Button(box_buttons, text="Clear Boxes", command=self.on_clear_boxes).grid(
+            row=0, column=1, sticky="ew", padx=(4, 0)
+        )
         row += 1
 
-        ttk.Label(controls_frame, text="Score threshold").grid(row=row, column=0, sticky="w", pady=(12, 4))
+        ttk.Label(controls_frame, text="Score threshold").grid(
+            row=row, column=0, sticky="w", pady=(12, 4)
+        )
         row += 1
-        ttk.Scale(controls_frame, from_=0.05, to=0.95, variable=self.score_var, orient="horizontal").grid(row=row, column=0, sticky="ew")
-        row += 1
-
-        ttk.Label(controls_frame, text="Mask threshold").grid(row=row, column=0, sticky="w", pady=(12, 4))
-        row += 1
-        ttk.Scale(controls_frame, from_=0.05, to=0.95, variable=self.mask_var, orient="horizontal").grid(row=row, column=0, sticky="ew")
-        row += 1
-
-        ttk.Label(controls_frame, text="Auto points_per_batch").grid(row=row, column=0, sticky="w", pady=(12, 4))
-        row += 1
-        ttk.Entry(controls_frame, textvariable=self.points_per_batch_var).grid(row=row, column=0, sticky="ew")
+        ttk.Scale(
+            controls_frame, from_=0.05, to=0.95, variable=self.score_var, orient="horizontal"
+        ).grid(row=row, column=0, sticky="ew")
         row += 1
 
-        ttk.Button(controls_frame, text="Run SAM3", command=self.on_run_inference).grid(row=row, column=0, sticky="ew", pady=(16, 0))
+        ttk.Label(controls_frame, text="Mask threshold").grid(
+            row=row, column=0, sticky="w", pady=(12, 4)
+        )
         row += 1
-        ttk.Button(controls_frame, text="Auto Segment All", command=self.on_auto_segment_all).grid(row=row, column=0, sticky="ew", pady=(6, 0))
+        ttk.Scale(
+            controls_frame, from_=0.05, to=0.95, variable=self.mask_var, orient="horizontal"
+        ).grid(row=row, column=0, sticky="ew")
         row += 1
-        ttk.Button(controls_frame, text="Save Result", command=self.on_save_result).grid(row=row, column=0, sticky="ew", pady=(6, 0))
+
+        ttk.Label(controls_frame, text="Auto points_per_batch").grid(
+            row=row, column=0, sticky="w", pady=(12, 4)
+        )
         row += 1
-        ttk.Button(controls_frame, text="Reset Overlay", command=self.on_reset_overlay).grid(row=row, column=0, sticky="ew", pady=(6, 0))
+        ttk.Entry(controls_frame, textvariable=self.points_per_batch_var).grid(
+            row=row, column=0, sticky="ew"
+        )
+        row += 1
+
+        ttk.Button(controls_frame, text="Run SAM3", command=self.on_run_inference).grid(
+            row=row, column=0, sticky="ew", pady=(16, 0)
+        )
+        row += 1
+        ttk.Button(controls_frame, text="Auto Segment All", command=self.on_auto_segment_all).grid(
+            row=row, column=0, sticky="ew", pady=(6, 0)
+        )
+        row += 1
+        ttk.Button(controls_frame, text="Save Result", command=self.on_save_result).grid(
+            row=row, column=0, sticky="ew", pady=(6, 0)
+        )
+        row += 1
+        ttk.Button(controls_frame, text="Reset Overlay", command=self.on_reset_overlay).grid(
+            row=row, column=0, sticky="ew", pady=(6, 0)
+        )
         row += 1
 
         ttk.Label(controls_frame, text="Status").grid(row=row, column=0, sticky="w", pady=(16, 4))
         row += 1
-        self.status_label = ttk.Label(controls_frame, textvariable=self.status_var, wraplength=280, justify="left")
+        self.status_label = ttk.Label(
+            controls_frame, textvariable=self.status_var, wraplength=280, justify="left"
+        )
         self.status_label.grid(row=row, column=0, sticky="ew")
 
     def set_status(self, message: str) -> None:
@@ -537,7 +601,13 @@ class Sam3InteractiveApp:
         }
         return merged_boxes, merged_masks_array, stats
 
-    def _apply_imported_prompts(self, prompt_boxes: list[PromptBox], imported_masks: np.ndarray | None, source_path: Path, stats: dict[str, int] | None = None) -> None:
+    def _apply_imported_prompts(
+        self,
+        prompt_boxes: list[PromptBox],
+        imported_masks: np.ndarray | None,
+        source_path: Path,
+        stats: dict[str, int] | None = None,
+    ) -> None:
         self.prompt_boxes = prompt_boxes
         self.imported_mask_prompts = imported_masks
         self.imported_prompt_source = source_path
@@ -547,7 +617,9 @@ class Sam3InteractiveApp:
         stats_info = ""
         if stats is not None:
             stats_info = f" (orig={stats['original']}, filtered={stats['filtered']}, top={stats['kept']}, merged={stats['merged_away']})"
-        self.set_status(f"Imported {len(prompt_boxes)} box prompts{mask_info} from {source_path.name}{stats_info}.")
+        self.set_status(
+            f"Imported {len(prompt_boxes)} box prompts{mask_info} from {source_path.name}{stats_info}."
+        )
 
     def on_import_traditional_prompts(self) -> None:
         file_path = filedialog.askopenfilename(
@@ -566,7 +638,9 @@ class Sam3InteractiveApp:
         try:
             if source_path.suffix.lower() == ".npy":
                 labels = np.load(source_path)
-                prompts, imported_masks = build_prompt_package(labels, mode="both", min_area=1, max_prompts=None)
+                prompts, imported_masks = build_prompt_package(
+                    labels, mode="both", min_area=1, max_prompts=None
+                )
                 prompt_boxes = [
                     PromptBox(
                         x1=float(prompt.bbox_xyxy[0]),
@@ -593,17 +667,30 @@ class Sam3InteractiveApp:
                     if "bbox_xyxy" in item and len(item["bbox_xyxy"]) == 4
                 ]
                 areas_px = [
-                    int(item.get("area_px", max(1, (item["bbox_xyxy"][2] - item["bbox_xyxy"][0] + 1) * (item["bbox_xyxy"][3] - item["bbox_xyxy"][1] + 1))))
+                    int(
+                        item.get(
+                            "area_px",
+                            max(
+                                1,
+                                (item["bbox_xyxy"][2] - item["bbox_xyxy"][0] + 1)
+                                * (item["bbox_xyxy"][3] - item["bbox_xyxy"][1] + 1),
+                            ),
+                        )
+                    )
                     for item in prompts
                     if "bbox_xyxy" in item and len(item["bbox_xyxy"]) == 4
                 ]
                 imported_masks = None
-                mask_prompts_path = self._resolve_optional_path(source_path, payload.get("mask_prompts_path"))
+                mask_prompts_path = self._resolve_optional_path(
+                    source_path, payload.get("mask_prompts_path")
+                )
                 if mask_prompts_path is not None and mask_prompts_path.exists():
                     mask_payload = np.load(mask_prompts_path)
                     imported_masks = np.asarray(mask_payload["masks"]).astype(bool)
 
-            prompt_boxes, imported_masks, stats = self._filter_and_merge_imported_prompts(prompt_boxes, imported_masks, areas_px=areas_px)
+            prompt_boxes, imported_masks, stats = self._filter_and_merge_imported_prompts(
+                prompt_boxes, imported_masks, areas_px=areas_px
+            )
             self._apply_imported_prompts(prompt_boxes, imported_masks, source_path, stats=stats)
         except Exception as exc:
             traceback.print_exc()
@@ -633,7 +720,9 @@ class Sam3InteractiveApp:
         self._redraw()
         self.set_status("Cleared model outputs; prompt boxes are kept.")
 
-    def _run_prediction(self, text_prompt: str | None, prompt_boxes: list[PromptBox], status_message: str) -> None:
+    def _run_prediction(
+        self, text_prompt: str | None, prompt_boxes: list[PromptBox], status_message: str
+    ) -> None:
         if self.current_image is None:
             messagebox.showwarning("No image", "Please load an image first.")
             return
@@ -683,7 +772,9 @@ class Sam3InteractiveApp:
             return
 
         try:
-            self.set_status(f"Running SAM3 automatic mask generation (points_per_batch={points_per_batch})...")
+            self.set_status(
+                f"Running SAM3 automatic mask generation (points_per_batch={points_per_batch})..."
+            )
             result = self.backend.generate_automatic_masks(
                 image=self.current_image,
                 points_per_batch=points_per_batch,
@@ -733,7 +824,9 @@ class Sam3InteractiveApp:
             "score_threshold": float(self.score_var.get()),
             "mask_threshold": float(self.mask_var.get()),
             "prompt_boxes": [box.as_xyxy + [box.label] for box in self.prompt_boxes],
-            "imported_prompt_source": str(self.imported_prompt_source) if self.imported_prompt_source else None,
+            "imported_prompt_source": str(self.imported_prompt_source)
+            if self.imported_prompt_source
+            else None,
             "scores": self.result_scores.tolist() if self.result_scores is not None else [],
             "boxes": self.result_boxes.tolist() if self.result_boxes is not None else [],
             "masks_path": str(output_masks),
@@ -742,7 +835,13 @@ class Sam3InteractiveApp:
         self.set_status(f"Saved preview to {output_png} and masks to {output_masks}.")
 
     def _on_rectangle_selected(self, eclick, erelease) -> None:
-        if self.current_image is None or eclick.xdata is None or eclick.ydata is None or erelease.xdata is None or erelease.ydata is None:
+        if (
+            self.current_image is None
+            or eclick.xdata is None
+            or eclick.ydata is None
+            or erelease.xdata is None
+            or erelease.ydata is None
+        ):
             return
         label = 1 if self.draw_mode.get() == "positive" else 0
         new_box = PromptBox(
@@ -799,14 +898,24 @@ class Sam3InteractiveApp:
             x1, y1, x2, y2 = prompt_box.as_xyxy
             color = "lime" if prompt_box.label == 1 else "red"
             self.ax.add_patch(
-                Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, edgecolor=color, linewidth=2.0, linestyle="--")
+                Rectangle(
+                    (x1, y1),
+                    x2 - x1,
+                    y2 - y1,
+                    fill=False,
+                    edgecolor=color,
+                    linewidth=2.0,
+                    linestyle="--",
+                )
             )
 
         if self.result_boxes is not None and self.result_scores is not None:
             for index, (box, score) in enumerate(zip(self.result_boxes, self.result_scores)):
                 x1, y1, x2, y2 = [float(value) for value in box]
                 self.ax.add_patch(
-                    Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, edgecolor="cyan", linewidth=1.8)
+                    Rectangle(
+                        (x1, y1), x2 - x1, y2 - y1, fill=False, edgecolor="cyan", linewidth=1.8
+                    )
                 )
                 self.ax.text(
                     x1,
@@ -828,15 +937,42 @@ class Sam3InteractiveApp:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Interactive SAM3 GUI for image prompting.")
-    parser.add_argument("--image", type=str, default=None, help="Optional image to open on startup.")
+    parser.add_argument(
+        "--image", type=str, default=None, help="Optional image to open on startup."
+    )
     parser.add_argument("--prompt", type=str, default=None, help="Optional initial text prompt.")
-    parser.add_argument("--model-id", type=str, default="facebook/sam3", help="Hugging Face model id.")
-    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"], help="Device selection.")
-    parser.add_argument("--score-threshold", type=float, default=0.5, help="Instance score threshold.")
+    parser.add_argument(
+        "--model-id", type=str, default="facebook/sam3", help="Hugging Face model id."
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda", "mps"],
+        help="Device selection.",
+    )
+    parser.add_argument(
+        "--score-threshold", type=float, default=0.5, help="Instance score threshold."
+    )
     parser.add_argument("--mask-threshold", type=float, default=0.5, help="Binary mask threshold.")
-    parser.add_argument("--points-per-batch", type=int, default=64, help="points_per_batch for automatic mask generation.")
-    parser.add_argument("--import-min-area", type=int, default=200, help="Minimum area in pixels for imported traditional boxes.")
-    parser.add_argument("--import-top-boxes", type=int, default=10, help="Keep only the top-N largest imported boxes before pairwise merging.")
+    parser.add_argument(
+        "--points-per-batch",
+        type=int,
+        default=64,
+        help="points_per_batch for automatic mask generation.",
+    )
+    parser.add_argument(
+        "--import-min-area",
+        type=int,
+        default=200,
+        help="Minimum area in pixels for imported traditional boxes.",
+    )
+    parser.add_argument(
+        "--import-top-boxes",
+        type=int,
+        default=10,
+        help="Keep only the top-N largest imported boxes before pairwise merging.",
+    )
     return parser.parse_args()
 
 

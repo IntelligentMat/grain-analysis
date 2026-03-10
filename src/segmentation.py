@@ -27,13 +27,15 @@ def _auto_min_grain_area(min_distance: int) -> int:
     return max(20, int(np.pi * (max(min_distance, 1) * 0.35) ** 2))
 
 
-def segment(enhanced: np.ndarray,
-            min_distance: int | None = None,
-            closing_disk_size: int = 2,
-            opening_disk_size: int = 1,
-            min_grain_area: int | None = None,
-            boundary_mode: str = "auto",
-            remove_border: bool = False) -> np.ndarray:
+def segment(
+    enhanced: np.ndarray,
+    min_distance: int | None = None,
+    closing_disk_size: int = 2,
+    opening_disk_size: int = 1,
+    min_grain_area: int | None = None,
+    boundary_mode: str = "auto",
+    remove_border: bool = False,
+) -> np.ndarray:
     """
     对预处理后的灰度图执行晶粒分割。
 
@@ -69,8 +71,8 @@ def segment(enhanced: np.ndarray,
             boundary = ~boundary
 
     # 3. 形态学操作：在晶界 mask 上填孔、去噪
-    boundary = closing(boundary, disk(closing_disk_size))      # 填补断裂晶界
-    boundary = opening(boundary, disk(opening_disk_size))      # 去除细线噪点/划痕
+    boundary = closing(boundary, disk(closing_disk_size))  # 填补断裂晶界
+    boundary = opening(boundary, disk(opening_disk_size))  # 去除细线噪点/划痕
 
     # 晶粒区域 mask（True=晶粒内部），用于距离变换与分水岭
     grain_mask: np.ndarray = np.asarray(~boundary)
@@ -111,9 +113,9 @@ def segment(enhanced: np.ndarray,
     return labels.astype(np.int32)
 
 
-def _fill_unseeded_regions(seed_mask: np.ndarray,
-                           grain_mask: np.ndarray,
-                           distance: np.ndarray) -> np.ndarray:
+def _fill_unseeded_regions(
+    seed_mask: np.ndarray, grain_mask: np.ndarray, distance: np.ndarray
+) -> np.ndarray:
     """为所有没有 marker 的连通晶粒区域在距离最大处补种（含内部孤立区域和边缘区域）。"""
     result = seed_mask.copy()
     region_labels = np.asarray(cast(Tuple[np.ndarray, int], ndi.label(grain_mask))[0])
@@ -126,6 +128,7 @@ def _fill_unseeded_regions(seed_mask: np.ndarray,
         best_idx = np.unravel_index(int(dist_in_region.argmax()), dist_in_region.shape)
         result[best_idx] = True
     return result
+
 
 def _remove_small_grains(labels: np.ndarray, min_area: int) -> np.ndarray:
     """移除面积小于 min_area 的晶粒区域。"""

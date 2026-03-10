@@ -21,10 +21,12 @@ def _estimate_noise_std(gray: np.ndarray) -> float:
     return float(np.std(residual) / 255.0)
 
 
-def _resolve_gaussian_sigma(gray: np.ndarray,
-                            gaussian_sigma: float | str | None,
-                            noise_to_sigma_k: float,
-                            sigma_bounds: tuple[float, float]) -> float:
+def _resolve_gaussian_sigma(
+    gray: np.ndarray,
+    gaussian_sigma: float | str | None,
+    noise_to_sigma_k: float,
+    sigma_bounds: tuple[float, float],
+) -> float:
     """将用户配置转换为最终用于平滑的 sigma。"""
     if gaussian_sigma is not None and gaussian_sigma != "auto":
         return float(gaussian_sigma)
@@ -35,20 +37,22 @@ def _resolve_gaussian_sigma(gray: np.ndarray,
     return float(np.clip(sigma, lo, hi))
 
 
-def preprocess(image: np.ndarray,
-               smooth_mode: str = "gaussian",
-               gaussian_sigma: float | str | None = "auto",
-               noise_to_sigma_k: float = 18.0,
-               sigma_bounds: tuple[float, float] = (0.8, 4.0),
-               bilateral_d: int = 9,
-               bilateral_sigma_color: float = 75.0,
-               bilateral_sigma_space: float = 75.0,
-               anisotropic_niter: int = 10,
-               anisotropic_kappa: int = 50,
-               anisotropic_gamma: float = 0.1,
-               median_kernel: int = 3,
-               clahe_clip_limit: float = 2.0,
-               clahe_tile_grid_size: tuple = (8, 8)) -> np.ndarray:
+def preprocess(
+    image: np.ndarray,
+    smooth_mode: str = "gaussian",
+    gaussian_sigma: float | str | None = "auto",
+    noise_to_sigma_k: float = 18.0,
+    sigma_bounds: tuple[float, float] = (0.8, 4.0),
+    bilateral_d: int = 9,
+    bilateral_sigma_color: float = 75.0,
+    bilateral_sigma_space: float = 75.0,
+    anisotropic_niter: int = 10,
+    anisotropic_kappa: int = 50,
+    anisotropic_gamma: float = 0.1,
+    median_kernel: int = 3,
+    clahe_clip_limit: float = 2.0,
+    clahe_tile_grid_size: tuple = (8, 8),
+) -> np.ndarray:
     """
     对输入图像执行预处理流程。
 
@@ -83,16 +87,16 @@ def preprocess(image: np.ndarray,
 
     # 2. 平滑去噪
     if smooth_mode == "bilateral":
-        blurred = cv2.bilateralFilter(gray, d=bilateral_d,
-                                      sigmaColor=bilateral_sigma_color,
-                                      sigmaSpace=bilateral_sigma_space)
+        blurred = cv2.bilateralFilter(
+            gray, d=bilateral_d, sigmaColor=bilateral_sigma_color, sigmaSpace=bilateral_sigma_space
+        )
 
     elif smooth_mode == "anisotropic":
         from medpy.filter.smoothing import anisotropic_diffusion
-        blurred = anisotropic_diffusion(gray,
-                                        niter=anisotropic_niter,
-                                        kappa=anisotropic_kappa,
-                                        gamma=anisotropic_gamma)
+
+        blurred = anisotropic_diffusion(
+            gray, niter=anisotropic_niter, kappa=anisotropic_kappa, gamma=anisotropic_gamma
+        )
         blurred = np.clip(blurred, 0, 255).astype(np.uint8)
 
     else:  # "gaussian"（默认）
@@ -102,8 +106,7 @@ def preprocess(image: np.ndarray,
             noise_to_sigma_k=noise_to_sigma_k,
             sigma_bounds=sigma_bounds,
         )
-        blurred = gaussian(gray.astype(np.float64), sigma=sigma,
-                           preserve_range=True)
+        blurred = gaussian(gray.astype(np.float64), sigma=sigma, preserve_range=True)
         blurred = np.clip(blurred, 0, 255).astype(np.uint8)
 
     # 3. 中值滤波（去椒盐噪声）
@@ -111,8 +114,7 @@ def preprocess(image: np.ndarray,
         blurred = cv2.medianBlur(blurred, median_kernel)
 
     # 4. CLAHE 自适应直方图均衡化（增强晶界对比度）
-    clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit,
-                             tileGridSize=clahe_tile_grid_size)
+    clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=clahe_tile_grid_size)
     enhanced = clahe.apply(blurred)
 
     return enhanced

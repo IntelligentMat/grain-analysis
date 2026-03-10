@@ -45,7 +45,9 @@ def _build_optical_segmentation(
 
     effective_min_distance = segmentation._auto_min_distance(enhanced.shape, min_distance)
     effective_min_grain_area = (
-        min_grain_area if min_grain_area is not None else segmentation._auto_min_grain_area(effective_min_distance)
+        min_grain_area
+        if min_grain_area is not None
+        else segmentation._auto_min_grain_area(effective_min_distance)
     )
     labels = segmentation.segment(
         enhanced,
@@ -171,18 +173,20 @@ def run(
     image = io_utils.load_image(image_path)
 
     if segmentation_backend == "optical":
-        labels, segmentation_params, segmentation_details, extra_artifacts = _build_optical_segmentation(
-            image=image,
-            smooth_mode=smooth_mode,
-            gaussian_sigma=gaussian_sigma,
-            median_kernel=median_kernel,
-            clahe_clip_limit=clahe_clip_limit,
-            clahe_tile_grid_size=clahe_tile_grid_size,
-            min_distance=min_distance,
-            closing_disk_size=closing_disk_size,
-            opening_disk_size=opening_disk_size,
-            min_grain_area=min_grain_area,
-            remove_border=remove_border,
+        labels, segmentation_params, segmentation_details, extra_artifacts = (
+            _build_optical_segmentation(
+                image=image,
+                smooth_mode=smooth_mode,
+                gaussian_sigma=gaussian_sigma,
+                median_kernel=median_kernel,
+                clahe_clip_limit=clahe_clip_limit,
+                clahe_tile_grid_size=clahe_tile_grid_size,
+                min_distance=min_distance,
+                closing_disk_size=closing_disk_size,
+                opening_disk_size=opening_disk_size,
+                min_grain_area=min_grain_area,
+                remove_border=remove_border,
+            )
         )
         return run_analysis_from_labels(
             image_path=image_path,
@@ -202,7 +206,10 @@ def run(
             segmentation_details=segmentation_details,
         )
 
-    optical_labels_path = Path(io_utils.make_output_dir(output_dir, image_name, "optical")) / f"{image_name}_labels.npy"
+    optical_labels_path = (
+        Path(io_utils.make_output_dir(output_dir, image_name, "optical"))
+        / f"{image_name}_labels.npy"
+    )
     if not optical_labels_path.exists():
         optical_result = run(
             image_path=image_path,
@@ -226,7 +233,9 @@ def run(
         )
         optical_labels_path = Path(optical_result["paths"]["labels"])
         if not optical_labels_path.exists():
-            raise FileNotFoundError(f"Optical labels not found after bootstrap run: {optical_labels_path}")
+            raise FileNotFoundError(
+                f"Optical labels not found after bootstrap run: {optical_labels_path}"
+            )
 
     sam3_out_dir = io_utils.make_output_dir(output_dir, image_name, "sam3")
     output_prefix = sam3_out_dir / f"{image_name}_sam3_prompts"
@@ -264,9 +273,15 @@ def run(
     }
     extra_artifacts = {
         "sam3_prompt_json_path": str(sam3_result["prompt_paths"]["json"].resolve()),
-        "sam3_prompt_masks_path": str(sam3_result["prompt_paths"]["masks"].resolve()) if "masks" in sam3_result["prompt_paths"] else None,
-        "sam3_raw_masks_path": str(sam3_result["raw_masks_path"].resolve()) if sam3_result["raw_masks_path"] else None,
-        "sam3_raw_json_path": str(sam3_result["raw_json_path"].resolve()) if sam3_result["raw_json_path"] else None,
+        "sam3_prompt_masks_path": str(sam3_result["prompt_paths"]["masks"].resolve())
+        if "masks" in sam3_result["prompt_paths"]
+        else None,
+        "sam3_raw_masks_path": str(sam3_result["raw_masks_path"].resolve())
+        if sam3_result["raw_masks_path"]
+        else None,
+        "sam3_raw_json_path": str(sam3_result["raw_json_path"].resolve())
+        if sam3_result["raw_json_path"]
+        else None,
     }
     extra_artifacts = {key: value for key, value in extra_artifacts.items() if value is not None}
 

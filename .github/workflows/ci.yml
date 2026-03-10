@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements-ci.txt
+            requirements-dev.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install CI and dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run pre-commit checks
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      - name: Run unit tests
+        run: pre-commit run unit-tests --hook-stage pre-push
+
+      - name: Validate commit messages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            RANGE="origin/${{ github.base_ref }}..HEAD"
+          elif [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            RANGE="${{ github.event.before }}..${{ github.sha }}"
+          else
+            RANGE="${{ github.sha }}"
+          fi
+
+          COMMITS=$(git rev-list "$RANGE")
+          if [[ -z "$COMMITS" ]]; then
+            COMMITS="${{ github.sha }}"
+          fi
+
+          for COMMIT in $COMMITS; do
+            SUBJECT=$(git log -1 --format=%s "$COMMIT")
+            echo "Checking commit: $SUBJECT"
+            python scripts/check_commit_message.py --message "$SUBJECT"
+          done

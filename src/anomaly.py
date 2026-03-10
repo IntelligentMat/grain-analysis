@@ -24,7 +24,7 @@ class RuleAResult:
 @dataclass
 class RuleBResult:
     triggered: bool
-    top_pct: float                  # 检测的大晶粒百分比（默认 5%）
+    top_pct: float  # 检测的大晶粒百分比（默认 5%）
     area_fraction_threshold: float  # 面积占比阈值（默认 30%）
     top_pct_area_fraction: float
 
@@ -46,11 +46,13 @@ class AnomalyResult:
     anomalous_grain_ids: List[int] = field(default_factory=list)
 
 
-def detect_anomalies(grain_props: List[GrainProps],
-                     stats: GrainStatistics,
-                     rule_a_threshold: float = 3.0,
-                     rule_b_top_pct: float = 5.0,
-                     rule_b_area_frac_threshold: float = 0.30) -> AnomalyResult:
+def detect_anomalies(
+    grain_props: List[GrainProps],
+    stats: GrainStatistics,
+    rule_a_threshold: float = 3.0,
+    rule_b_top_pct: float = 5.0,
+    rule_b_area_frac_threshold: float = 0.30,
+) -> AnomalyResult:
     """
     对晶粒列表执行三规则异常判定。
 
@@ -81,8 +83,7 @@ def detect_anomalies(grain_props: List[GrainProps],
     ratio = d_max / d_avg if d_avg > 0 else 0.0
     rule_a_triggered = ratio > rule_a_threshold
     rule_a_anomalous = (
-        ids[diameters > d_avg * rule_a_threshold].tolist()
-        if rule_a_triggered else []
+        ids[diameters > d_avg * rule_a_threshold].tolist() if rule_a_triggered else []
     )
     rule_a = RuleAResult(
         triggered=rule_a_triggered,

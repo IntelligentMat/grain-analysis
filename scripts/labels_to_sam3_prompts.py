@@ -15,11 +15,22 @@ from src.sam3_backend import export_prompt_package
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Convert optical labels.npy into SAM3 prompt packages.")
+    parser = argparse.ArgumentParser(
+        description="Convert optical labels.npy into SAM3 prompt packages."
+    )
     parser.add_argument("--labels", required=True, help="Path to *_labels.npy")
-    parser.add_argument("--output-prefix", default=None, help="Output prefix for prompt package files")
-    parser.add_argument("--top-ratio", type=float, default=0.3, help="Select top-ratio grains by area")
-    parser.add_argument("--mode", choices=["boxes", "masks", "both"], default="both", help="Which prompt artifacts to export")
+    parser.add_argument(
+        "--output-prefix", default=None, help="Output prefix for prompt package files"
+    )
+    parser.add_argument(
+        "--top-ratio", type=float, default=0.3, help="Select top-ratio grains by area"
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["boxes", "masks", "both"],
+        default="both",
+        help="Which prompt artifacts to export",
+    )
     return parser.parse_args()
 
 

@@ -1,0 +1,3 @@
+-r requirements-ci.txt
+pre-commit
+ruff

@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-mpl_dir = Path(tempfile.gettempdir()) / 'grain_analysis_test_mpl'
+mpl_dir = Path(tempfile.gettempdir()) / "grain_analysis_test_mpl"
 mpl_dir.mkdir(parents=True, exist_ok=True)
-os.environ.setdefault('MPLBACKEND', 'Agg')
-os.environ.setdefault('MPLCONFIGDIR', str(mpl_dir))
+os.environ.setdefault("MPLBACKEND", "Agg")
+os.environ.setdefault("MPLCONFIGDIR", str(mpl_dir))
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -27,13 +27,16 @@ class TestAreaMethod(unittest.TestCase):
         # - grains 3 and 5 touching image corners.
         # The test verifies both raw classification and the weighted equivalent
         # grain count used by the ASTM area method.
-        labels = np.array([
-            [3, 2, 2, 2, 0],
-            [4, 1, 1, 2, 0],
-            [4, 1, 1, 0, 0],
-            [4, 4, 0, 5, 5],
-            [0, 0, 0, 5, 5],
-        ], dtype=np.int32)
+        labels = np.array(
+            [
+                [3, 2, 2, 2, 0],
+                [4, 1, 1, 2, 0],
+                [4, 1, 1, 0, 0],
+                [4, 4, 0, 5, 5],
+                [0, 0, 0, 5, 5],
+            ],
+            dtype=np.int32,
+        )
 
         result = area_method(labels, pixels_per_micron=2.0)
 
@@ -58,7 +61,7 @@ class TestAreaMethod(unittest.TestCase):
         """Reject invalid calibration values before any grain statistics are computed."""
 
         labels = np.ones((3, 3), dtype=np.int32)
-        with self.assertRaisesRegex(ValueError, 'pixels_per_micron'):
+        with self.assertRaisesRegex(ValueError, "pixels_per_micron"):
             area_method(labels, pixels_per_micron=0)
 
 
@@ -100,9 +103,9 @@ class TestInterceptMethod(unittest.TestCase):
         """Reject invalid spatial calibration for intercept calculations as well."""
 
         labels = np.ones((5, 5), dtype=np.int32)
-        with self.assertRaisesRegex(ValueError, 'pixels_per_micron'):
+        with self.assertRaisesRegex(ValueError, "pixels_per_micron"):
             intercept_method(labels, pixels_per_micron=-1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

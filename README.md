@@ -28,6 +28,61 @@ micromamba activate grain-analysis
 - 对 `facebook/sam3` 的访问权限
 - 已完成 Hugging Face 登录（若模型访问受限）
 
+## CI / GitHub Actions
+
+仓库内置了一个 GitHub Actions 工作流：`.github/workflows/ci.yml`。
+
+- 触发时机：每次 `push` 和 `pull_request`
+- Python 版本：`3.11`
+- 依赖来源：`requirements-dev.txt`（内部引用 `requirements-ci.txt`）
+- 检查内容：`ruff lint`、`ruff format`、单元测试、commit message 格式
+
+说明：
+
+- 默认 CI 覆盖项目的常规测试、`optical` 分割路径和 SAM3 辅助逻辑测试
+- CI **不会**下载或加载 `facebook/sam3` 模型
+- CI **不依赖** Hugging Face 登录，也不会运行需要 gated model 权限的 SAM3 真推理
+- commit message 采用 Conventional Commits 规范，例如：`feat(ci): add pre-commit hooks`
+
+### 提交前自动检查
+
+项目使用 `pre-commit` 统一本地提交前检查。安装开发依赖后执行：
+
+```bash
+python -m pip install -r requirements-dev.txt
+pre-commit install --hook-type pre-commit --hook-type pre-push --hook-type commit-msg
+```
+
+安装后会自动执行：
+
+- `pre-commit` 阶段：`ruff check --fix`、`ruff format`
+- `pre-push` 阶段：`python -m unittest discover -s tests -v`
+- `commit-msg` 阶段：检查 commit message 是否符合 Conventional Commits
+
+常用手动命令：
+
+```bash
+pre-commit run --all-files
+python -m unittest discover -s tests -v
+python scripts/check_commit_message.py --message "feat(ci): add quality gates"
+```
+
+如需在本地对齐 GitHub Actions，可使用一个干净的 Python 3.11 环境执行：
+
+```bash
+python -m pip install -r requirements-dev.txt
+pre-commit run --all-files
+pre-commit run unit-tests --hook-stage pre-push
+```
+
+如果你希望 PR 合并前必须通过检查，请在 GitHub 仓库中配置分支保护：
+
+1. 打开 `Settings > Branches`
+2. 为主分支添加 branch protection rule
+3. 勾选 `Require a pull request before merging`
+4. 勾选 `Require status checks to pass before merging`
+5. 将 `CI` 对应的检查项设为 required
+
 ---
 
 ## 快速运行
