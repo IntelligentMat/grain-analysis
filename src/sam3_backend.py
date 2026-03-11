@@ -127,9 +127,10 @@ class TransformersSam3Backend:
             raise Sam3InferenceError("SAM3 prompt inference requires at least one prompt box.")
 
         input_boxes = [[box.as_xyxy for box in prompt_boxes]]
-        input_box_labels = [[[int(box.label) for box in prompt_boxes]]]
+        input_box_labels = [[int(box.label) for box in prompt_boxes]]
+        processor = cast(Any, self._processor)
 
-        inputs = self._processor(
+        inputs = processor(
             images=image,
             input_boxes=input_boxes,
             input_boxes_labels=input_box_labels,

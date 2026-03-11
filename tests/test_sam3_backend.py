@@ -14,10 +14,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 from PIL import Image
+from typing import Any, cast
+from unittest.mock import patch
 
 from src.sam3_backend import (
     GrainPrompt,
     PromptBox,
+    TransformersSam3Backend,
     export_prompt_package,
     masks_to_labels,
     run_prompted_sam3,
@@ -152,3 +155,91 @@ class TestSam3BackendHelpers(unittest.TestCase):
             self.assertIsNone(result["raw_masks_path"])
             self.assertEqual(result["labels"].shape, (6, 8))
             self.assertEqual(int(result["labels"].max()), 0)
+
+
+class _FakeTensor:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def to(self, _device):
+        return self
+
+    def detach(self):
+        return self
+
+    def cpu(self):
+        return self
+
+    def numpy(self):
+        return np.asarray(self.payload)
+
+    def __len__(self):
+        return len(self.payload)
+
+
+class _FakeTorch:
+    class _NoGrad:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def no_grad(self):
+        return self._NoGrad()
+
+
+class _FakeProcessor:
+    def __init__(self):
+        self.last_kwargs = None
+
+    def __call__(self, **kwargs):
+        self.last_kwargs = kwargs
+        return {"pixel_values": _FakeTensor([1.0]), "original_sizes": [[10, 12]]}
+
+    def post_process_instance_segmentation(
+        self, outputs, threshold, mask_threshold, target_sizes
+    ):
+        del outputs, threshold, mask_threshold, target_sizes
+        return [
+            {
+                "masks": _FakeTensor(np.ones((1, 10, 12), dtype=bool)),
+                "boxes": _FakeTensor(np.array([[1, 1, 5, 5]], dtype=np.float32)),
+                "scores": _FakeTensor(np.array([0.9], dtype=np.float32)),
+            }
+        ]
+
+
+class _FakeModel:
+    def __call__(self, **kwargs):
+        return kwargs
+
+
+class TestTransformersSam3Backend(unittest.TestCase):
+    def test_predict_uses_two_level_box_label_nesting(self):
+        backend = TransformersSam3Backend(model_id="unused", device="cpu")
+        fake_processor = _FakeProcessor()
+
+        backend._processor = cast(Any, fake_processor)
+        backend._model = cast(Any, _FakeModel())
+        backend._torch = cast(Any, _FakeTorch())
+        backend.device = "cpu"
+
+        prompt_boxes = [PromptBox(1, 2, 5, 6, label=1), PromptBox(3, 4, 7, 8, label=1)]
+
+        with patch.object(backend, "_lazy_load", return_value=None):
+            result = backend.predict(
+                image=Image.fromarray(np.zeros((10, 12, 3), dtype=np.uint8)),
+                prompt_boxes=prompt_boxes,
+                score_threshold=0.5,
+                mask_threshold=0.5,
+            )
+
+        assert fake_processor.last_kwargs is not None
+        self.assertEqual(
+            fake_processor.last_kwargs["input_boxes"],
+            [[[1.0, 2.0, 5.0, 6.0], [3.0, 4.0, 7.0, 8.0]]],
+        )
+        self.assertEqual(fake_processor.last_kwargs["input_boxes_labels"], [[1, 1]])
+        self.assertEqual(result["device"], "cpu")
+        self.assertEqual(result["masks"].shape, (1, 10, 12))
