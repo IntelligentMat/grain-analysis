@@ -4,8 +4,10 @@ io_utils.py — 输入输出与结果存储模块
 负责：
   - 图像读取（单张 / 批量）
   - 输出目录创建
-  - results.json 序列化写入
+  - 工件与 results.json 序列化写入
 """
+
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -32,11 +34,11 @@ def load_image(image_path: str) -> np.ndarray:
 
 
 def collect_images(input_path: str) -> List[str]:
-    p = Path(input_path)
-    if p.is_file():
-        return [str(p)]
-    if p.is_dir():
-        return sorted([str(f) for f in p.iterdir() if f.suffix.lower() in SUPPORTED_EXTS])
+    path = Path(input_path)
+    if path.is_file():
+        return [str(path)]
+    if path.is_dir():
+        return sorted([str(file) for file in path.iterdir() if file.suffix.lower() in SUPPORTED_EXTS])
     raise ValueError(f"Input path not found: {input_path}")
 
 
@@ -48,7 +50,7 @@ def make_output_dir(base_output: str, image_name: str, backend: str | None = Non
     return out_dir
 
 
-def output_paths(out_dir: Path, name: str) -> dict:
+def output_paths(out_dir: Path, name: str) -> dict[str, str]:
     return {
         "original": str(out_dir / f"{name}_original.png"),
         "segmented": str(out_dir / f"{name}_segmented.png"),
@@ -57,23 +59,24 @@ def output_paths(out_dir: Path, name: str) -> dict:
         "anomaly": str(out_dir / f"{name}_anomaly.png"),
         "distribution": str(out_dir / f"{name}_distribution.png"),
         "labels": str(out_dir / f"{name}_labels.npy"),
+        "grain_props": str(out_dir / f"{name}_grain_props.npy"),
         "json": str(out_dir / f"{name}_results.json"),
     }
 
 
-def _to_serializable(obj):
-    if isinstance(obj, (np.bool_,)):
+def _to_serializable(obj: Any):
+    if isinstance(obj, np.bool_):
         return bool(obj)
-    if isinstance(obj, (np.integer,)):
+    if isinstance(obj, np.integer):
         return int(obj)
-    if isinstance(obj, (np.floating,)):
+    if isinstance(obj, np.floating):
         return float(obj)
     if isinstance(obj, np.ndarray):
         return obj.tolist()
     if isinstance(obj, dict):
-        return {k: _to_serializable(v) for k, v in obj.items()}
+        return {key: _to_serializable(value) for key, value in obj.items()}
     if isinstance(obj, (list, tuple)):
-        return [_to_serializable(i) for i in obj]
+        return [_to_serializable(item) for item in obj]
     return obj
 
 
@@ -81,19 +84,24 @@ def save_labels(output_path: str, labels: np.ndarray) -> None:
     np.save(output_path, labels)
 
 
+def save_grain_props(output_path: str, grain_props: np.ndarray) -> None:
+    np.save(output_path, grain_props)
+
+
 def load_results_json(results_json_path: str) -> dict[str, Any]:
-    with open(results_json_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    with open(results_json_path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def save_json(output_path: str, payload: dict[str, Any]) -> None:
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(_to_serializable(payload), f, indent=2, ensure_ascii=False)
+    with open(output_path, "w", encoding="utf-8") as handle:
+        json.dump(_to_serializable(payload), handle, indent=2, ensure_ascii=False)
 
 
 def save_results_json(
     output_path: str,
     labels_path: str,
+    grain_props_path: str,
     image_name: str,
     image_path: str,
     image_shape: tuple[int, ...],
@@ -101,44 +109,53 @@ def save_results_json(
     segmentation_method: str,
     segmentation_params: dict,
     total_grains: int,
+    pixels_per_micron: float,
     stats: GrainStatistics,
     area_result: AreaMethodResult,
     intercept_result: InterceptMethodResult,
     anomaly_result: AnomalyResult,
     extra_artifacts: dict[str, Any] | None = None,
     segmentation_details: dict[str, Any] | None = None,
+    config_info: dict[str, Any] | None = None,
 ) -> None:
-    def _rule_a(r):
+    def _rule_a(rule):
         return {
-            "triggered": r.triggered,
-            "d_max_over_d_avg": r.d_max_over_d_avg,
-            "threshold": r.threshold,
-            "anomalous_grain_ids": r.anomalous_grain_ids,
+            "triggered": rule.triggered,
+            "d_max_over_d_avg": rule.d_max_over_d_avg,
+            "threshold": rule.threshold,
+            "anomalous_grain_ids": rule.anomalous_grain_ids,
         }
 
-    def _rule_b(r):
+    def _rule_b(rule):
         return {
-            "triggered": r.triggered,
-            f"top{r.top_pct:.0f}pct_area_fraction": r.top_pct_area_fraction,
-            "area_fraction_threshold": r.area_fraction_threshold,
+            "triggered": rule.triggered,
+            f"top{rule.top_pct:.0f}pct_area_fraction": rule.top_pct_area_fraction,
+            "area_fraction_threshold": rule.area_fraction_threshold,
         }
 
-    def _rule_c(r):
+    def _rule_c(rule):
         return {
-            "triggered": r.triggered,
-            "anomalous_grain_ids": r.anomalous_grain_ids,
-            "threshold_px": r.threshold_px,
+            "triggered": rule.triggered,
+            "anomalous_grain_ids": rule.anomalous_grain_ids,
+            "threshold_um": rule.threshold_um,
         }
 
     result = {
         "image_name": image_name,
         "image_path": image_path,
-        "measurement_mode": "pixel",
+        "pixels_per_micron": pixels_per_micron,
+        "measurement_mode": "physical_um",
         "image": {
             "shape": list(image_shape),
         },
+        "config": {
+            "source_path": config_info.get("source_path") if config_info else None,
+            "effective": config_info.get("effective", {}) if config_info else {},
+            "cli_overrides": config_info.get("cli_overrides", {}) if config_info else {},
+        },
         "artifacts": {
             "labels_path": labels_path,
+            "grain_props_path": grain_props_path,
             **(extra_artifacts or {}),
         },
         "segmentation": {
@@ -150,16 +167,19 @@ def save_results_json(
         },
         "grain_statistics": {
             "count": stats.count,
-            "mean_diameter_px": round(stats.mean_diameter_px, 3),
-            "std_diameter_px": round(stats.std_diameter_px, 3),
-            "min_diameter_px": round(stats.min_diameter_px, 3),
-            "max_diameter_px": round(stats.max_diameter_px, 3),
-            "median_diameter_px": round(stats.median_diameter_px, 3),
-            "p10_diameter_px": round(stats.p10_diameter_px, 3),
-            "p90_diameter_px": round(stats.p90_diameter_px, 3),
-            "mean_area_px2": round(stats.mean_area_px2, 3),
-            "total_area_px2": round(stats.total_area_px2, 3),
-            "diameters": [round(d, 3) for d in stats.diameters],
+            "mean_diameter_um": round(stats.mean_diameter_um, 3),
+            "std_diameter_um": round(stats.std_diameter_um, 3),
+            "min_diameter_um": round(stats.min_diameter_um, 3),
+            "max_diameter_um": round(stats.max_diameter_um, 3),
+            "median_diameter_um": round(stats.median_diameter_um, 3),
+            "p10_diameter_um": round(stats.p10_diameter_um, 3),
+            "p90_diameter_um": round(stats.p90_diameter_um, 3),
+            "mean_area_um2": round(stats.mean_area_um2, 3),
+            "total_area_um2": round(stats.total_area_um2, 3),
+            "mean_aspect_ratio": round(stats.mean_aspect_ratio, 4),
+            "mean_circularity": round(stats.mean_circularity, 4),
+            "diameters_um": [round(value, 3) for value in stats.diameters_um],
+            "areas_um2": [round(value, 3) for value in stats.areas_um2],
         },
         "area_method": {
             "n_inside": area_result.n_inside,
@@ -180,9 +200,8 @@ def save_results_json(
             "n_lines": intercept_result.n_lines,
             "n_circles": intercept_result.n_circles,
             "total_intersections": intercept_result.total_intersections,
-            "total_line_length_px": round(intercept_result.total_line_length_px, 2),
-            "n_l_per_px": round(intercept_result.n_l_per_px, 6),
-            "mean_intercept_length_px": round(intercept_result.mean_intercept_length_px, 3),
+            "total_line_length_um": round(intercept_result.total_line_length_um, 3),
+            "n_l_per_mm": round(intercept_result.n_l_per_mm, 6),
             "mean_intercept_length_um": round(intercept_result.mean_intercept_length_um, 3),
             "astm_g_value": round(intercept_result.astm_g_value, 3),
             "counting_basis": "grain_segments_n",

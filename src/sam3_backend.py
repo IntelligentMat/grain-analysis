@@ -5,7 +5,7 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from PIL import Image
@@ -105,7 +105,7 @@ class TransformersSam3Backend:
             ) from exc
 
         self._torch = torch
-        self._model = model.to(resolved_device)
+        self._model = cast(Any, model).to(resolved_device)
         self._model.eval()
         self._processor = processor
         self.device = resolved_device
@@ -127,7 +127,7 @@ class TransformersSam3Backend:
             raise Sam3InferenceError("SAM3 prompt inference requires at least one prompt box.")
 
         input_boxes = [[box.as_xyxy for box in prompt_boxes]]
-        input_box_labels = [[int(box.label) for box in prompt_boxes]]
+        input_box_labels = [[[int(box.label) for box in prompt_boxes]]]
 
         inputs = self._processor(
             images=image,
@@ -137,6 +137,7 @@ class TransformersSam3Backend:
         )
 
         target_sizes = inputs.get("original_sizes")
+        target_sizes_serialized = None if target_sizes is None else (target_sizes.tolist() if hasattr(target_sizes, "tolist") else target_sizes)
         prepared_inputs: dict[str, Any] = {}
         for key, value in inputs.items():
             prepared_inputs[key] = value.to(self.device) if hasattr(value, "to") else value
@@ -148,7 +149,7 @@ class TransformersSam3Backend:
             outputs,
             threshold=score_threshold,
             mask_threshold=mask_threshold,
-            target_sizes=target_sizes.tolist() if hasattr(target_sizes, "tolist") else target_sizes,
+            target_sizes=target_sizes_serialized,
         )[0]
 
         masks = (
@@ -191,18 +192,18 @@ def masks_to_labels(
     scores: np.ndarray | None = None,
     opening_disk_size: int = 1,
     closing_disk_size: int = 2,
-) -> tuple[np.ndarray, dict[str, int]]:
+) -> tuple[np.ndarray, dict[str, int | str]]:
     if masks.ndim != 3:
         raise ValueError("masks must have shape (N, H, W)")
 
     masks = masks.astype(bool)
     num_masks = masks.shape[0]
     if scores is None or len(scores) != num_masks:
-        scores = np.ones(num_masks, dtype=np.float32)
+        score_array = np.ones(num_masks, dtype=np.float32)
     else:
-        scores = np.asarray(scores, dtype=np.float32)
+        score_array = np.asarray(scores, dtype=np.float32)
 
-    order = np.argsort(-scores) if num_masks else np.empty((0,), dtype=np.int32)
+    order = np.argsort(-score_array) if num_masks else np.empty((0,), dtype=np.int32)
     labels = np.zeros(masks.shape[1:], dtype=np.int32)
     next_id = 1
     kept_masks = 0

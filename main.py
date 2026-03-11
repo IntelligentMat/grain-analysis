@@ -14,7 +14,25 @@ from pathlib import Path
 import click
 from tqdm import tqdm
 
+from src import config as app_config
 from src import io_utils, pipeline, visualization
+
+
+def _explicit_configurable_params(ctx: click.Context) -> set[str]:
+    explicit: set[str] = set()
+    get_source = getattr(ctx, "get_parameter_source", None)
+    raw_args = sys.argv[1:]
+
+    for spec in app_config.OPTION_SPECS:
+        if callable(get_source):
+            source = get_source(spec.param_name)
+            if getattr(source, "name", "") == "COMMANDLINE":
+                explicit.add(spec.param_name)
+                continue
+
+        if any(app_config.was_option_explicit(arg, spec.flags) for arg in raw_args):
+            explicit.add(spec.param_name)
+    return explicit
 
 
 @click.command()
@@ -24,6 +42,12 @@ from src import io_utils, pipeline, visualization
     "render_results_path",
     default=None,
     help="根据已有 results.json 重绘可视化",
+)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    help="YAML 配置文件路径（仅分析模式可用）",
 )
 @click.option(
     "--output", "-o", "output_dir", default=None, help="输出根目录；重绘时不传则写回原结果目录"
@@ -128,9 +152,12 @@ from src import io_utils, pipeline, visualization
     type=float,
     help="从 optical labels 中按面积选前多少比例晶粒做 prompts",
 )
+@click.pass_context
 def main(
+    ctx: click.Context,
     input_path,
     render_results_path,
+    config_path,
     output_dir,
     smooth_mode,
     gaussian_sigma,
@@ -161,6 +188,10 @@ def main(
         click.echo("[ERROR] 请二选一提供 --input 或 --render-from-results。", err=True)
         sys.exit(1)
 
+    if render_results_path and config_path:
+        click.echo("[ERROR] --config 仅分析模式可用，不能和 --render-from-results 同时使用。", err=True)
+        sys.exit(1)
+
     if render_results_path:
         try:
             paths = visualization.render_all_from_results(
@@ -172,11 +203,28 @@ def main(
         click.echo(f"重绘完成，结果目录：{Path(paths['json']).parent}")
         return
 
-    actual_output_dir = output_dir or "./data"
+    explicit_params = _explicit_configurable_params(ctx)
+    try:
+        resolved = app_config.build_resolved_config(
+            config_path=config_path,
+            cli_values=ctx.params,
+            explicit_param_names=explicit_params,
+        )
+    except Exception as exc:
+        click.echo(f"[ERROR] 配置解析失败: {exc}", err=True)
+        sys.exit(1)
+
+    actual_output_dir = resolved.runtime_values["output_dir"]
+    config_info = {
+        "source_path": resolved.source_path,
+        "effective": resolved.effective,
+        "cli_overrides": app_config.prune_empty_override_groups(resolved.cli_overrides),
+    }
+
     try:
         image_files = io_utils.collect_images(input_path)
-    except ValueError as e:
-        click.echo(f"[ERROR] {e}", err=True)
+    except ValueError as exc:
+        click.echo(f"[ERROR] {exc}", err=True)
         sys.exit(1)
 
     if not image_files:
@@ -190,29 +238,8 @@ def main(
         try:
             result = pipeline.run(
                 image_path=img_path,
-                output_dir=actual_output_dir,
-                smooth_mode=smooth_mode,
-                gaussian_sigma=gaussian_sigma,
-                median_kernel=median_kernel,
-                clahe_clip_limit=clahe_clip,
-                segmentation_backend=segmentation_backend,
-                min_distance=min_distance,
-                closing_disk_size=closing_disk,
-                opening_disk_size=opening_disk,
-                min_grain_area=min_grain_area,
-                remove_border=remove_border,
-                pixels_per_micron=pixels_per_micron,
-                min_intercept_px=min_intercept_px,
-                rule_a_threshold=rule_a_threshold,
-                rule_b_top_pct=rule_b_top_pct,
-                rule_b_area_frac=rule_b_area_frac,
-                sam3_model_id=sam3_model_id,
-                sam3_device=sam3_device,
-                sam3_score_threshold=sam3_score_threshold,
-                sam3_mask_threshold=sam3_mask_threshold,
-                sam3_opening_disk_size=sam3_opening_disk,
-                sam3_closing_disk_size=sam3_closing_disk,
-                sam3_prompt_top_ratio=sam3_prompt_top_ratio,
+                config_info=config_info,
+                **resolved.pipeline_kwargs,
             )
             tqdm.write(
                 f"  {result['image_name']:30s} | "
