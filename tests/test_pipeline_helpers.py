@@ -51,8 +51,12 @@ class TestPipelineHelpers(unittest.TestCase):
                 "raw_json_path": root / "raw.json",
             }
 
-            with patch("src.pipeline.run_prompted_sam3", return_value=fake_sam3_result) as sam3_mock:
-                with patch("src.pipeline.run_analysis_from_labels", return_value={"ok": True}) as analysis_mock:
+            with patch(
+                "src.pipeline.run_prompted_sam3", return_value=fake_sam3_result
+            ) as sam3_mock:
+                with patch(
+                    "src.pipeline.run_analysis_from_labels", return_value={"ok": True}
+                ) as analysis_mock:
                     result = pipeline.run(
                         image_path=str(image_path),
                         output_dir=str(root / "out"),

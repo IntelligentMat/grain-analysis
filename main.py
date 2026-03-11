@@ -189,7 +189,9 @@ def main(
         sys.exit(1)
 
     if render_results_path and config_path:
-        click.echo("[ERROR] --config 仅分析模式可用，不能和 --render-from-results 同时使用。", err=True)
+        click.echo(
+            "[ERROR] --config 仅分析模式可用，不能和 --render-from-results 同时使用。", err=True
+        )
         sys.exit(1)
 
     if render_results_path:

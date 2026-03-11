@@ -197,9 +197,7 @@ class _FakeProcessor:
         self.last_kwargs = kwargs
         return {"pixel_values": _FakeTensor([1.0]), "original_sizes": [[10, 12]]}
 
-    def post_process_instance_segmentation(
-        self, outputs, threshold, mask_threshold, target_sizes
-    ):
+    def post_process_instance_segmentation(self, outputs, threshold, mask_threshold, target_sizes):
         del outputs, threshold, mask_threshold, target_sizes
         return [
             {

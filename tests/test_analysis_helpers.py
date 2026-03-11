@@ -52,14 +52,18 @@ class TestAnalysisHelpers(unittest.TestCase):
         groups = analysis._valid_grain_segment_groups(line_labels, min_intercept_px=3)
         self.assertEqual(groups, [[(0, 3, 1)], [(4, 8, 2)]])
         self.assertEqual(analysis._count_intercepts(line_labels, min_intercept_px=3), 1.5)
-        self.assertEqual(analysis._intercepted_grain_ids_on_path(line_labels, min_intercept_px=3), {1, 2})
+        self.assertEqual(
+            analysis._intercepted_grain_ids_on_path(line_labels, min_intercept_px=3), {1, 2}
+        )
 
         closed_labels = np.array([4, 4, 0, 5, 5, 5, 0, 4, 4])
         closed_groups = analysis._valid_grain_segment_groups(
             closed_labels, min_intercept_px=2, is_closed=True
         )
         self.assertEqual(closed_groups, [[(7, 9, 4), (0, 2, 4)], [(3, 6, 5)]])
-        self.assertEqual(analysis._count_intercepts(closed_labels, min_intercept_px=2, is_closed=True), 2.0)
+        self.assertEqual(
+            analysis._count_intercepts(closed_labels, min_intercept_px=2, is_closed=True), 2.0
+        )
 
     def test_intercept_position_helpers_mark_half_segments(self):
         labels = np.array([1, 1, 1, 0, 2, 2, 2, 0, 3, 3, 3])

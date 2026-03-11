@@ -47,18 +47,23 @@ analysis:
             image_path = Path(tmpdir) / "demo.png"
             image_path.write_bytes(b"fake")
 
-            with mock.patch.object(cli_module.io_utils, "collect_images", return_value=[str(image_path)]), mock.patch.object(
-                cli_module.pipeline,
-                "run",
-                return_value={
-                    "image_name": "demo",
-                    "segmentation_backend": "optical",
-                    "total_grains": 3,
-                    "astm_g_area": 5.0,
-                    "astm_g_intercept": 5.1,
-                    "has_anomaly": False,
-                },
-            ) as run_mock:
+            with (
+                mock.patch.object(
+                    cli_module.io_utils, "collect_images", return_value=[str(image_path)]
+                ),
+                mock.patch.object(
+                    cli_module.pipeline,
+                    "run",
+                    return_value={
+                        "image_name": "demo",
+                        "segmentation_backend": "optical",
+                        "total_grains": 3,
+                        "astm_g_area": 5.0,
+                        "astm_g_intercept": 5.1,
+                        "has_anomaly": False,
+                    },
+                ) as run_mock,
+            ):
                 result = runner.invoke(
                     cli_module.main,
                     [

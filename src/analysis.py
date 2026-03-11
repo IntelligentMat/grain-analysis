@@ -142,7 +142,12 @@ def extract_grain_props(labels: np.ndarray, pixels_per_micron: float) -> List[Gr
                 aspect_ratio=float(aspect_ratio),
                 circularity=float(circularity),
                 centroid_rc_px=(float(prop.centroid[0]), float(prop.centroid[1])),
-                bbox_rc_px=(int(prop.bbox[0]), int(prop.bbox[1]), int(prop.bbox[2]), int(prop.bbox[3])),
+                bbox_rc_px=(
+                    int(prop.bbox[0]),
+                    int(prop.bbox[1]),
+                    int(prop.bbox[2]),
+                    int(prop.bbox[3]),
+                ),
             )
         )
 

@@ -138,7 +138,11 @@ class TransformersSam3Backend:
         )
 
         target_sizes = inputs.get("original_sizes")
-        target_sizes_serialized = None if target_sizes is None else (target_sizes.tolist() if hasattr(target_sizes, "tolist") else target_sizes)
+        target_sizes_serialized = (
+            None
+            if target_sizes is None
+            else (target_sizes.tolist() if hasattr(target_sizes, "tolist") else target_sizes)
+        )
         prepared_inputs: dict[str, Any] = {}
         for key, value in inputs.items():
             prepared_inputs[key] = value.to(self.device) if hasattr(value, "to") else value

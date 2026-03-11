@@ -387,7 +387,9 @@ def build_resolved_config(
     )
 
 
-def prune_empty_override_groups(cli_overrides: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def prune_empty_override_groups(
+    cli_overrides: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
     cleaned: dict[str, dict[str, Any]] = {}
     for group, values in cli_overrides.items():
         group_values = {key: value for key, value in values.items() if value is not None}

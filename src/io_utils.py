@@ -38,7 +38,9 @@ def collect_images(input_path: str) -> List[str]:
     if path.is_file():
         return [str(path)]
     if path.is_dir():
-        return sorted([str(file) for file in path.iterdir() if file.suffix.lower() in SUPPORTED_EXTS])
+        return sorted(
+            [str(file) for file in path.iterdir() if file.suffix.lower() in SUPPORTED_EXTS]
+        )
     raise ValueError(f"Input path not found: {input_path}")
 
 

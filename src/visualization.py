@@ -148,7 +148,9 @@ def save_segmented(image: np.ndarray, labels: np.ndarray, output_path: str) -> N
     _save(fig, output_path)
 
 
-def render_area_method(image: np.ndarray, labels: np.ndarray, results: dict, output_path: str) -> None:
+def render_area_method(
+    image: np.ndarray, labels: np.ndarray, results: dict, output_path: str
+) -> None:
     rgb = _as_rgb(image)
     area_result = results["area_method"]
     inside_ids = area_result.get("inside_grain_ids", [])
@@ -167,7 +169,9 @@ def render_area_method(image: np.ndarray, labels: np.ndarray, results: dict, out
     h, w = labels.shape
     fig, ax = plt.subplots(figsize=(7, 6))
     ax.imshow(tinted)
-    rect = mpatches.Rectangle((0, 0), w - 1, h - 1, linewidth=2, edgecolor="yellow", facecolor="none")
+    rect = mpatches.Rectangle(
+        (0, 0), w - 1, h - 1, linewidth=2, edgecolor="yellow", facecolor="none"
+    )
     ax.add_patch(rect)
 
     _annotate_grain_ids(ax, labels, inside_ids, text_color="#90ee90")
