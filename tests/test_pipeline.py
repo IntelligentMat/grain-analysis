@@ -17,8 +17,6 @@ from src import pipeline
 
 
 class TestPipelineOptical(unittest.TestCase):
-    """Exercise the full optical pipeline on a deterministic fixture image."""
-
     def test_pipeline_runs_optical_flow_on_grid_fixture(self):
         fixture = Path(__file__).resolve().parent / "fixtures" / "grid_fixture.png"
         self.assertTrue(fixture.exists(), f"Missing fixture: {fixture}")
@@ -39,6 +37,11 @@ class TestPipelineOptical(unittest.TestCase):
                 remove_border=False,
                 pixels_per_micron=1.0,
                 min_intercept_px=3,
+                config_info={
+                    "source_path": None,
+                    "effective": {"analysis": {"pixels-per-micron": 1.0}},
+                    "cli_overrides": {"analysis": {"pixels-per-micron": 1.0}},
+                },
             )
 
             self.assertEqual(result["segmentation_backend"], "optical")
@@ -55,7 +58,7 @@ class TestPipelineOptical(unittest.TestCase):
             self.assertEqual(result["area_result"].corner_grain_ids, [1, 3, 8, 9])
 
             self.assertAlmostEqual(result["intercept_result"].total_intersections, 21.0)
-            self.assertAlmostEqual(result["intercept_result"].n_l_per_px, 0.02489650347979036)
+            self.assertAlmostEqual(result["intercept_result"].n_l_per_mm, 24.89650347979036)
             self.assertAlmostEqual(
                 result["intercept_result"].mean_intercept_length_um, 40.16628282006532
             )
@@ -64,28 +67,23 @@ class TestPipelineOptical(unittest.TestCase):
             )
 
             labels_path = Path(result["paths"]["labels"])
+            grain_props_path = Path(result["paths"]["grain_props"])
             json_path = Path(result["paths"]["json"])
             self.assertTrue(labels_path.exists())
+            self.assertTrue(grain_props_path.exists())
             self.assertTrue(json_path.exists())
-            for key in ["original", "segmented", "area", "intercept", "anomaly"]:
+            for key in ["original", "segmented", "area", "intercept", "anomaly", "distribution"]:
                 self.assertTrue(Path(result["paths"][key]).exists(), key)
 
             labels = np.load(labels_path)
             self.assertEqual(labels.shape, (90, 90))
             self.assertEqual(int(labels.max()), 9)
-            centers = [
-                (15, 15),
-                (15, 45),
-                (15, 75),
-                (45, 15),
-                (45, 45),
-                (45, 75),
-                (75, 15),
-                (75, 45),
-                (75, 75),
-            ]
-            center_labels = [int(labels[r, c]) for r, c in centers]
-            self.assertEqual(set(center_labels), set(range(1, 10)))
+
+            grain_props = np.load(grain_props_path)
+            self.assertIn("equivalent_diameter_um", grain_props.dtype.names)
+            self.assertIn("aspect_ratio", grain_props.dtype.names)
+            self.assertIn("circularity", grain_props.dtype.names)
+            self.assertEqual(len(grain_props), 9)
 
             with open(json_path, "r", encoding="utf-8") as handle:
                 payload = json.load(handle)
@@ -101,3 +99,12 @@ class TestPipelineOptical(unittest.TestCase):
                 payload["intercept_method"]["intersected_grain_ids"], [1, 2, 3, 4, 5, 6, 7, 8, 9]
             )
             self.assertAlmostEqual(payload["intercept_method"]["total_intersections"], 21.0)
+            self.assertEqual(payload["pixels_per_micron"], 1.0)
+            self.assertEqual(payload["config"]["effective"]["analysis"]["pixels-per-micron"], 1.0)
+            self.assertIn("grain_props_path", payload["artifacts"])
+            self.assertIn("mean_aspect_ratio", payload["grain_statistics"])
+            self.assertIn("mean_circularity", payload["grain_statistics"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,32 @@
+run:
+  output: ./data
+  segmentation-backend: optical
+
+preprocessing:
+  smooth-mode: gaussian
+  gaussian-sigma: null
+  median-kernel: 3
+  clahe-clip: 2.0
+
+segmentation:
+  min-distance: null
+  closing-disk: 2
+  opening-disk: 1
+  min-grain-area: null
+  remove-border: false
+
+analysis:
+  pixels-per-micron: 2.25
+  min-intercept-px: 3
+  rule-a-threshold: 3.0
+  rule-b-top-pct: 5.0
+  rule-b-area-frac: 0.30
+
+sam3:
+  sam3-model-id: ../sam3
+  sam3-device: auto
+  sam3-score-threshold: 0.5
+  sam3-mask-threshold: 0.5
+  sam3-opening-disk: 1
+  sam3-closing-disk: 2
+  sam3-prompt-top-ratio: 0.05

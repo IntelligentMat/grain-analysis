@@ -6,4 +6,5 @@ matplotlib
 pillow
 click
 tqdm
+PyYAML
 imageio

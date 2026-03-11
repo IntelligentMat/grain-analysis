@@ -84,12 +84,16 @@ def run_analysis_from_labels(
     rule_b_area_frac: float,
     extra_artifacts: dict[str, Any] | None = None,
     segmentation_details: dict[str, Any] | None = None,
+    config_info: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     out_dir = io_utils.make_output_dir(output_dir, image_name, segmentation_backend)
     paths = io_utils.output_paths(out_dir, image_name)
     io_utils.save_labels(paths["labels"], labels)
 
-    grain_props = analysis.extract_grain_props(labels)
+    grain_props = analysis.extract_grain_props(labels, pixels_per_micron=pixels_per_micron)
+    io_utils.save_grain_props(
+        paths["grain_props"], analysis.grain_props_to_structured_array(grain_props)
+    )
     stats = analysis.compute_grain_statistics(grain_props)
     area_result = analysis.area_method(labels, pixels_per_micron=pixels_per_micron)
     intercept_result = analysis.intercept_method(
@@ -108,6 +112,7 @@ def run_analysis_from_labels(
     io_utils.save_results_json(
         output_path=paths["json"],
         labels_path=str(Path(paths["labels"]).resolve()),
+        grain_props_path=str(Path(paths["grain_props"]).resolve()),
         image_name=image_name,
         image_path=str(Path(image_path).resolve()),
         image_shape=image.shape,
@@ -115,12 +120,14 @@ def run_analysis_from_labels(
         segmentation_method=segmentation_method,
         segmentation_params=segmentation_params,
         total_grains=int(labels.max()),
+        pixels_per_micron=pixels_per_micron,
         stats=stats,
         area_result=area_result,
         intercept_result=intercept_result,
         anomaly_result=anomaly_result,
         extra_artifacts=extra_artifacts,
         segmentation_details=segmentation_details,
+        config_info=config_info,
     )
 
     visualization.render_all_from_results(paths["json"])
@@ -167,6 +174,7 @@ def run(
     sam3_opening_disk_size: int = 1,
     sam3_closing_disk_size: int = 2,
     sam3_prompt_top_ratio: float = 0.05,
+    config_info: dict[str, Any] | None = None,
 ) -> dict:
     segmentation_backend = _normalize_backend(segmentation_backend)
     image_name = Path(image_path).stem
@@ -204,6 +212,7 @@ def run(
             rule_b_area_frac=rule_b_area_frac,
             extra_artifacts=extra_artifacts,
             segmentation_details=segmentation_details,
+            config_info=config_info,
         )
 
     optical_labels_path = (
@@ -230,6 +239,7 @@ def run(
             rule_a_threshold=rule_a_threshold,
             rule_b_top_pct=rule_b_top_pct,
             rule_b_area_frac=rule_b_area_frac,
+            config_info=config_info,
         )
         optical_labels_path = Path(optical_result["paths"]["labels"])
         if not optical_labels_path.exists():
@@ -301,4 +311,5 @@ def run(
         rule_b_area_frac=rule_b_area_frac,
         extra_artifacts=extra_artifacts,
         segmentation_details=segmentation_details,
+        config_info=config_info,
     )

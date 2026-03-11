@@ -13,6 +13,7 @@ dependencies:
   - pillow
   - click
   - tqdm
+  - pyyaml
   - libjpeg-turbo
   - libpng
   - jpeg

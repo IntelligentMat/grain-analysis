@@ -2,13 +2,15 @@
 visualization.py — 结果可视化与标注模块
 
 生成：
-  {name}_original.png        原始输入图像
-  {name}_segmented.png       分割结果伪彩色叠加
-  {name}_area_method.png     面积法标注图
+  {name}_original.png         原始输入图像
+  {name}_segmented.png        分割结果伪彩色叠加
+  {name}_area_method.png      面积法标注图
   {name}_intercept_method.png 截线法标注图
-  {name}_anomaly.png         异常晶粒高亮图
-  {name}_distribution.png    晶粒尺寸分布直方图
+  {name}_anomaly.png          异常晶粒高亮图
+  {name}_distribution.png     晶粒尺寸分布直方图
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
@@ -16,16 +18,21 @@ from typing import Optional
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from skimage.color import label2rgb
 from skimage.measure import regionprops
 from skimage.segmentation import find_boundaries
-from matplotlib.lines import Line2D
 
 from src import io_utils
+
+
+LEGACY_SCHEMA_ERROR = (
+    "Legacy results.json without physical-unit fields is not supported; please rerun analysis."
+)
 
 
 def _save(fig: Figure, path: str) -> None:
@@ -45,14 +52,20 @@ def _resolve_artifact_path(results_json_path: str, raw_path: str) -> Path:
         return path
 
     json_dir = Path(results_json_path).resolve().parent
-    candidates = [
-        json_dir / path,
-        Path(raw_path).resolve(),
-    ]
+    candidates = [json_dir / path, Path(raw_path).resolve()]
     for candidate in candidates:
         if candidate.exists():
             return candidate
     return candidates[0]
+
+
+def _require_new_schema(results: dict) -> None:
+    stats = results.get("grain_statistics", {})
+    intercept = results.get("intercept_method", {})
+    if "diameters_um" not in stats or "mean_diameter_um" not in stats:
+        raise ValueError(LEGACY_SCHEMA_ERROR)
+    if "total_line_length_um" not in intercept:
+        raise ValueError(LEGACY_SCHEMA_ERROR)
 
 
 def _label_centroids(labels: np.ndarray) -> dict[int, tuple[float, float]]:
@@ -80,7 +93,9 @@ def _tint_mask(
 
 
 def _overlay_boundaries(
-    image: np.ndarray, labels: np.ndarray, color: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    image: np.ndarray,
+    labels: np.ndarray,
+    color: tuple[float, float, float] = (1.0, 1.0, 1.0),
 ) -> np.ndarray:
     overlay = image.copy()
     boundaries = find_boundaries(labels, mode="outer")
@@ -109,7 +124,6 @@ def _annotate_grain_ids(ax, labels: np.ndarray, grain_ids: list[int], text_color
 
 
 def save_original(image: np.ndarray, output_path: str) -> None:
-    """保存原始图像（彩色或灰度）。"""
     fig, ax = plt.subplots(figsize=(6, 5))
     ax.imshow(_as_rgb(image))
     ax.set_title("Original Image")
@@ -118,7 +132,6 @@ def save_original(image: np.ndarray, output_path: str) -> None:
 
 
 def save_segmented(image: np.ndarray, labels: np.ndarray, output_path: str) -> None:
-    """将晶粒分割标签叠加到原始图像上（伪彩色）。"""
     bg = _as_rgb(image)
     overlay = label2rgb(labels, image=bg, alpha=0.4, bg_label=0, bg_color=(0, 0, 0))
 
@@ -138,7 +151,6 @@ def save_segmented(image: np.ndarray, labels: np.ndarray, output_path: str) -> N
 def render_area_method(
     image: np.ndarray, labels: np.ndarray, results: dict, output_path: str
 ) -> None:
-    """根据结果工件重绘面积法可视化。"""
     rgb = _as_rgb(image)
     area_result = results["area_method"]
     inside_ids = area_result.get("inside_grain_ids", [])
@@ -157,7 +169,6 @@ def render_area_method(
     h, w = labels.shape
     fig, ax = plt.subplots(figsize=(7, 6))
     ax.imshow(tinted)
-
     rect = mpatches.Rectangle(
         (0, 0), w - 1, h - 1, linewidth=2, edgecolor="yellow", facecolor="none"
     )
@@ -170,6 +181,7 @@ def render_area_method(
     info = (
         f"N_inside={area_result['n_inside']}, N_edge={area_result['n_edge']}, N_corner={area_result['n_corner']}\n"
         f"N_eq={area_result['n_equivalent']:.1f}, N_A={area_result['n_a_per_mm2']:.1f}/mm²\n"
+        f"d_avg={area_result['mean_diameter_um']:.2f} μm\n"
         f"ASTM G = {area_result['astm_g_value']:.2f}"
     )
     ax.text(
@@ -188,7 +200,7 @@ def render_area_method(
         mpatches.Patch(color=(0.95, 0.3, 0.7), label="Corner grains (adjacent borders, 1/4)"),
     ]
     ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.6)
-    ax.set_title("Area Method (Planimetric / Jeffries, adjacent-border corners)")
+    ax.set_title("Area Method (Planimetric / Jeffries)")
     ax.axis("off")
     _save(fig, output_path)
 
@@ -196,7 +208,6 @@ def render_area_method(
 def render_intercept_method(
     image: np.ndarray, labels: np.ndarray, results: dict, output_path: str
 ) -> None:
-    """根据结果工件重绘截线法可视化。"""
     rgb = _as_rgb(image)
     intercept_result = results["intercept_method"]
     intersected_ids = intercept_result.get("intersected_grain_ids", [])
@@ -220,7 +231,6 @@ def render_intercept_method(
 
     half_points = intercept_result.get("half_intersection_points", [])
     half_point_set = {tuple(point) for point in half_points}
-
     points = [
         tuple(point)
         for point in intercept_result.get("intersection_points", [])
@@ -233,14 +243,21 @@ def render_intercept_method(
     if half_points:
         half_pts = np.array(half_points)
         ax.scatter(
-            half_pts[:, 1], half_pts[:, 0], s=38, c="#ff4d4f", marker="x", linewidths=1.3, zorder=6
+            half_pts[:, 1],
+            half_pts[:, 0],
+            s=38,
+            c="#ff4d4f",
+            marker="x",
+            linewidths=1.3,
+            zorder=6,
         )
 
     _annotate_grain_ids(ax, labels, intersected_ids, text_color="#fff799")
 
     info = (
         f"Intercepts={intercept_result['total_intersections']}\n"
-        f"L_total={intercept_result['total_line_length_px']:.0f} px\n"
+        f"L_total={intercept_result['total_line_length_um']:.2f} μm\n"
+        f"N_L={intercept_result['n_l_per_mm']:.2f} / mm\n"
         f"l̄={intercept_result['mean_intercept_length_um']:.2f} μm\n"
         f"ASTM G = {intercept_result['astm_g_value']:.2f}"
     )
@@ -276,7 +293,6 @@ def render_intercept_method(
 
 
 def render_anomaly(image: np.ndarray, labels: np.ndarray, results: dict, output_path: str) -> None:
-    """根据结果工件重绘异常晶粒可视化。"""
     rgb = _as_rgb(image)
     anomaly = results["anomaly_detection"]
     anomaly_ids = anomaly.get("anomalous_grain_ids", [])
@@ -294,11 +310,13 @@ def render_anomaly(image: np.ndarray, labels: np.ndarray, results: dict, output_
     _annotate_grain_ids(ax, labels, anomaly_ids, text_color="#ff8a8a")
 
     flag = "YES" if anomaly["has_anomaly"] else "NO"
+    rule_c = anomaly["rule_c"]
     info = (
         f"Anomaly detected: {flag}\n"
         f"Rule A: {'✓' if anomaly['rule_a']['triggered'] else '✗'}  "
         f"Rule B: {'✓' if anomaly['rule_b']['triggered'] else '✗'}  "
-        f"Rule C: {'✓' if anomaly['rule_c']['triggered'] else '✗'}\n"
+        f"Rule C: {'✓' if rule_c['triggered'] else '✗'}\n"
+        f"Rule C threshold: {rule_c.get('threshold_um', 0):.2f} μm\n"
         f"Anomalous grains: {anomaly['total_anomalous_grains']}"
     )
     ax.text(
@@ -317,9 +335,8 @@ def render_anomaly(image: np.ndarray, labels: np.ndarray, results: dict, output_
 
 
 def render_distribution(results: dict, output_path: str) -> None:
-    """根据结果工件重绘晶粒尺寸分布直方图。"""
     stats = results["grain_statistics"]
-    diameters = stats.get("diameters", [])
+    diameters = stats.get("diameters_um", [])
     if not diameters:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "No grains detected", ha="center", va="center")
@@ -329,32 +346,47 @@ def render_distribution(results: dict, output_path: str) -> None:
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.hist(diameters, bins=30, color="steelblue", edgecolor="white", alpha=0.85)
     ax.axvline(
-        stats["mean_diameter_px"],
+        stats["mean_diameter_um"],
         color="red",
         linestyle="--",
         linewidth=1.5,
-        label=f"Mean={stats['mean_diameter_px']:.1f} px",
+        label=f"Mean={stats['mean_diameter_um']:.1f} μm",
     )
     ax.axvline(
-        stats["median_diameter_px"],
+        stats["median_diameter_um"],
         color="orange",
         linestyle=":",
         linewidth=1.5,
-        label=f"Median={stats['median_diameter_px']:.1f} px",
+        label=f"Median={stats['median_diameter_um']:.1f} μm",
     )
 
-    threshold_3sigma = stats["mean_diameter_px"] + 3 * stats["std_diameter_px"]
+    threshold_3sigma = stats["mean_diameter_um"] + 3 * stats["std_diameter_um"]
     ax.axvline(
         threshold_3sigma,
         color="purple",
         linestyle="-.",
         linewidth=1.2,
-        label=f"μ+3σ={threshold_3sigma:.1f} px",
+        label=f"μ+3σ={threshold_3sigma:.1f} μm",
     )
 
-    ax.set_xlabel("Equivalent Diameter (px)")
+    summary = (
+        f"Mean aspect ratio = {stats.get('mean_aspect_ratio', 0):.3f}\n"
+        f"Mean circularity = {stats.get('mean_circularity', 0):.3f}"
+    )
+    ax.text(
+        0.98,
+        0.98,
+        summary,
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=8,
+        bbox=dict(facecolor="white", alpha=0.75, edgecolor="none"),
+    )
+
+    ax.set_xlabel("Equivalent Diameter (μm)")
     ax.set_ylabel("Count")
-    ax.set_title(f"Grain Size Distribution  (n={stats['count']})")
+    ax.set_title(f"Grain Size Distribution (n={stats['count']})")
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
     _save(fig, output_path)
@@ -363,8 +395,9 @@ def render_distribution(results: dict, output_path: str) -> None:
 def render_all_from_results(
     results_json_path: str, output_dir: Optional[str] = None
 ) -> dict[str, str]:
-    """从结果 JSON 与 labels.npy 重建全部可视化文件。"""
     results = io_utils.load_results_json(results_json_path)
+    _require_new_schema(results)
+
     labels_path = _resolve_artifact_path(results_json_path, results["artifacts"]["labels_path"])
     image_path = _resolve_artifact_path(results_json_path, results["image_path"])
 
