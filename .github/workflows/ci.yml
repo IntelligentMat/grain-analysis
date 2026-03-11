@@ -51,8 +51,12 @@ jobs:
             RANGE="${{ github.sha }}"
           fi
 
-          COMMITS=$(git rev-list "$RANGE")
+          COMMITS=$(git rev-list --no-merges "$RANGE")
           if [[ -z "$COMMITS" ]]; then
+            if git rev-parse --verify --quiet "${{ github.sha }}^2" >/dev/null; then
+              echo "No non-merge commits to validate in range: $RANGE"
+              exit 0
+            fi
             COMMITS="${{ github.sha }}"
           fi
 
